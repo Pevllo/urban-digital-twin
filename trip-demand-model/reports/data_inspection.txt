@@ -1,0 +1,203 @@
+======================================================================
+DATA INSPECTION: traffic_ml_dataset.csv.gz
+======================================================================
+rows=8,506,000  cols=22  mem=1770.2 MB
+
+--- dtypes ---
+road_id                         object
+date                    datetime64[ns]
+hour                              int8
+highway                         object
+highway_code                     int16
+road_length_m                  float64
+lane_count                     float64
+speed_limit_kmh                float64
+is_oneway                         int8
+is_bridge                         int8
+is_tunnel                         int8
+road_hierarchy                   int64
+node_degree                    float64
+connected_road_count           float64
+intersection_density           float64
+day_of_week                       int8
+month                             int8
+is_weekend                        int8
+is_peak_hour                      int8
+morning_peak                      int8
+evening_peak                      int8
+traffic_volume                   int64
+
+--- columns ---
+['road_id', 'date', 'hour', 'highway', 'highway_code', 'road_length_m', 'lane_count', 'speed_limit_kmh', 'is_oneway', 'is_bridge', 'is_tunnel', 'road_hierarchy', 'node_degree', 'connected_road_count', 'intersection_density', 'day_of_week', 'month', 'is_weekend', 'is_peak_hour', 'morning_peak', 'evening_peak', 'traffic_volume']
+
+--- missing values ---
+none
+
+--- duplicated rows ---
+full-row duplicates: 0
+duplicate (road_id,date,hour) keys: 0
+
+--- cardinality ---
+hour: nunique=10
+highway: nunique=13
+highway_code: nunique=13
+lane_count: nunique=5
+speed_limit_kmh: nunique=7
+is_oneway: nunique=2
+is_bridge: nunique=2
+is_tunnel: nunique=2
+road_hierarchy: nunique=7
+node_degree: nunique=10
+connected_road_count: nunique=7
+intersection_density: nunique=1
+day_of_week: nunique=7
+month: nunique=7
+is_weekend: nunique=2
+is_peak_hour: nunique=2
+morning_peak: nunique=2
+evening_peak: nunique=2
+
+unique roads: 4,253
+date range: 2024-01-01 00:00:00 .. 2024-07-18 00:00:00  (200 unique dates)
+hour range: 0 .. 21
+rows per road: min=2000, max=2000, roads with != 2000 rows: 0
+
+--- target: traffic_volume ---
+min=0  max=56941  mean=1306.399  median=145.0  std=2995.317
+skewness=5.1992  kurtosis=42.1080
+0.01        0.0
+0.05        0.0
+0.25        0.0
+0.50      145.0
+0.75     1238.0
+0.95     6458.0
+0.99    14684.0
+zeros: 3,129,813 (36.80%)   negatives: 0
+is numeric: True
+
+--- categorical columns ---
+road_id: 4253 unique -> {'osm_road_004252': np.int64(2000), 'osm_road_000000': np.int64(2000), 'osm_road_000001': np.int64(2000), 'osm_road_000002': np.int64(2000), 'osm_road_000003': np.int64(2000), 'osm_road_000004': np.int64(2000), 'osm_road_000005': np.int64(2000), 'osm_road_000006': np.int64(2000), 'osm_road_000007': np.int64(2000), 'osm_road_000008': np.int64(2000), 'osm_road_000009': np.int64(2000), 'osm_road_000010': np.int64(2000), 'osm_road_000011': np.int64(2000), 'osm_road_004236': np.int64(2000), 'osm_road_004235': np.int64(2000)}
+hour: 10 unique -> {0: np.int64(850600), 3: np.int64(850600), 6: np.int64(850600), 7: np.int64(850600), 8: np.int64(850600), 9: np.int64(850600), 12: np.int64(850600), 15: np.int64(850600), 18: np.int64(850600), 21: np.int64(850600)}
+highway: 13 unique -> {'unclassified': np.int64(5654000), 'residential': np.int64(778000), 'tertiary': np.int64(774000), 'secondary': np.int64(440000), 'trunk': np.int64(250000), 'tertiary_link': np.int64(170000), 'primary': np.int64(168000), 'secondary_link': np.int64(138000), 'trunk_link': np.int64(70000), 'primary_link': np.int64(32000), 'motorway': np.int64(16000), 'motorway_link': np.int64(12000), 'service': np.int64(4000)}
+highway_code: 13 unique -> {12: np.int64(5654000), 4: np.int64(778000), 8: np.int64(774000), 5: np.int64(440000), 10: np.int64(250000), 9: np.int64(170000), 2: np.int64(168000), 6: np.int64(138000), 11: np.int64(70000), 3: np.int64(32000), 0: np.int64(16000), 1: np.int64(12000), 7: np.int64(4000)}
+lane_count: 5 unique -> {1.0: np.int64(7486000), 2.0: np.int64(840000), 3.0: np.int64(146000), 4.0: np.int64(28000), 5.0: np.int64(6000)}
+speed_limit_kmh: 7 unique -> {35.0: np.int64(5792000), 30.0: np.int64(952000), 40.0: np.int64(806000), 50.0: np.int64(510000), 80.0: np.int64(250000), 60.0: np.int64(180000), 100.0: np.int64(16000)}
+is_oneway: 2 unique -> {1: np.int64(5242000), 0: np.int64(3264000)}
+is_bridge: 2 unique -> {0: np.int64(8490000), 1: np.int64(16000)}
+is_tunnel: 2 unique -> {0: np.int64(8482000), 1: np.int64(24000)}
+road_hierarchy: 7 unique -> {6: np.int64(5658000), 5: np.int64(944000), 7: np.int64(778000), 4: np.int64(578000), 2: np.int64(320000), 3: np.int64(200000), 1: np.int64(28000)}
+node_degree: 10 unique -> {3.0: np.int64(3450000), 2.0: np.int64(2168000), 2.5: np.int64(1782000), 3.5: np.int64(612000), 4.0: np.int64(358000), 1.5: np.int64(102000), 4.5: np.int64(20000), 5.0: np.int64(10000), 5.5: np.int64(2000), 6.5: np.int64(2000)}
+connected_road_count: 7 unique -> {3.0: np.int64(3010000), 1.0: np.int64(1860000), 2.0: np.int64(1700000), 4.0: np.int64(944000), 5.0: np.int64(868000), 6.0: np.int64(112000), 7.0: np.int64(12000)}
+intersection_density: 1 unique -> {2.2116454: np.int64(8506000)}
+day_of_week: 7 unique -> {0: np.int64(1233370), 1: np.int64(1233370), 2: np.int64(1233370), 3: np.int64(1233370), 4: np.int64(1190840), 5: np.int64(1190840), 6: np.int64(1190840)}
+month: 7 unique -> {1: np.int64(1318430), 3: np.int64(1318430), 5: np.int64(1318430), 6: np.int64(1275900), 4: np.int64(1275900), 2: np.int64(1233370), 7: np.int64(765540)}
+is_weekend: 2 unique -> {0: np.int64(6124320), 1: np.int64(2381680)}
+is_peak_hour: 2 unique -> {0: np.int64(5103600), 1: np.int64(3402400)}
+morning_peak: 2 unique -> {0: np.int64(5954200), 1: np.int64(2551800)}
+evening_peak: 2 unique -> {0: np.int64(7655400), 1: np.int64(850600)}
+
+numerical columns (19): ['hour', 'highway_code', 'road_length_m', 'lane_count', 'speed_limit_kmh', 'is_oneway', 'is_bridge', 'is_tunnel', 'road_hierarchy', 'node_degree', 'connected_road_count', 'intersection_density', 'day_of_week', 'month', 'is_weekend', 'is_peak_hour', 'morning_peak', 'evening_peak', 'traffic_volume']
+identifier columns: ['road_id']
+
+--- numerical summary ---
+                          count         mean           std        min        25%         50%          75%           max
+hour                  8506000.0     9.900000  6.268174e+00   0.000000   6.000000    8.500000    15.000000     21.000000
+highway_code          8506000.0    10.046085  3.106351e+00   0.000000   8.000000   12.000000    12.000000     12.000000
+road_length_m         8506000.0   140.227730  3.744172e+02   0.577727  21.921839   51.256954   125.881165   6512.663600
+lane_count            8506000.0     1.145779  4.325181e-01   1.000000   1.000000    1.000000     1.000000      5.000000
+speed_limit_kmh       8506000.0    37.787444  9.569623e+00  30.000000  35.000000   35.000000    35.000000    100.000000
+is_oneway             8506000.0     0.616271  4.862932e-01   0.000000   0.000000    1.000000     1.000000      1.000000
+is_bridge             8506000.0     0.001881  4.332998e-02   0.000000   0.000000    0.000000     0.000000      1.000000
+is_tunnel             8506000.0     0.002822  5.304316e-02   0.000000   0.000000    0.000000     0.000000      1.000000
+road_hierarchy        8506000.0     5.607101  1.102598e+00   1.000000   6.000000    6.000000     6.000000      7.000000
+node_degree           8506000.0     2.707736  5.685370e-01   1.500000   2.000000    3.000000     3.000000      6.500000
+connected_road_count  8506000.0     2.723019  1.287656e+00   1.000000   2.000000    3.000000     3.000000      7.000000
+intersection_density  8506000.0     2.211645  1.154632e-14   2.211645   2.211645    2.211645     2.211645      2.211645
+day_of_week           8506000.0     2.970000  1.997273e+00   0.000000   1.000000    3.000000     5.000000      6.000000
+month                 8506000.0     3.815000  1.913315e+00   1.000000   2.000000    4.000000     5.000000      7.000000
+is_weekend            8506000.0     0.280000  4.489989e-01   0.000000   0.000000    0.000000     1.000000      1.000000
+is_peak_hour          8506000.0     0.400000  4.898980e-01   0.000000   0.000000    0.000000     1.000000      1.000000
+morning_peak          8506000.0     0.300000  4.582576e-01   0.000000   0.000000    0.000000     1.000000      1.000000
+evening_peak          8506000.0     0.100000  3.000000e-01   0.000000   0.000000    0.000000     0.000000      1.000000
+traffic_volume        8506000.0  1306.399111  2.995317e+03   0.000000   0.000000  145.000000  1238.000000  56941.000000
+
+--- suspicious / impossible value checks ---
+lane_count values: [np.float64(1.0), np.float64(2.0), np.float64(3.0), np.float64(4.0), np.float64(5.0)]
+speed_limit_kmh unique: [np.float64(30.0), np.float64(35.0), np.float64(40.0), np.float64(50.0), np.float64(60.0), np.float64(80.0), np.float64(100.0)]
+road_length_m: min=0.58, max=6512.66, zeros=0
+node_degree: min=1.5, max=6.5
+connected_road_count: min=1.0, max=7.0
+intersection_density: min=2.2116, max=2.2116
+is_oneway values: [np.int8(0), np.int8(1)]
+is_bridge values: [np.int8(0), np.int8(1)]
+is_tunnel values: [np.int8(0), np.int8(1)]
+
+--- temporal consistency ---
+day_of_week: mismatches vs computed = 0
+month: mismatches vs computed = 0
+is_weekend: mismatches vs computed = 2,381,680
+is_peak_hour: mismatches vs computed = 0
+morning_peak: mismatches vs computed = 0
+evening_peak: mismatches vs computed = 0
+
+hour distribution:
+hour
+0     850600
+3     850600
+6     850600
+7     850600
+8     850600
+9     850600
+12    850600
+15    850600
+18    850600
+21    850600
+
+is_weekend x day_of_week crosstab:
+is_weekend        0        1
+dow_calc                    
+0           1233370        0
+1           1233370        0
+2           1233370        0
+3           1233370        0
+4                 0  1190840
+5                 0  1190840
+6           1190840        0
+
+peak flags by hour:
+morning_peak       0               1
+evening_peak       0       1       0
+hour                                
+0             850600       0       0
+3             850600       0       0
+6             850600       0       0
+7                  0       0  850600
+8                  0       0  850600
+9                  0       0  850600
+12            850600       0       0
+15            850600       0       0
+18                 0  850600       0
+21            850600       0       0
+
+mean traffic_volume by hour:
+hour
+0      157.1
+3       63.2
+6      733.1
+7     2049.4
+8     2390.6
+9     1699.7
+12    1365.0
+15    1366.6
+18    2266.4
+21     972.8
+
+mean traffic_volume by dow (0=Mon):
+dow_calc
+0    1588.6
+1    1530.1
+2    1559.2
+3    1532.2
+4     655.5
+5     656.8
+6    1587.2

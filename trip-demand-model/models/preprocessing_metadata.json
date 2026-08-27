@@ -1,0 +1,172 @@
+{
+  "python_version": "3.13.14",
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "sklearn": "1.8.0",
+  "xgboost": "3.4.1",
+  "random_seed": 42,
+  "dataset": "data\\processed\\traffic_ml_clean.parquet",
+  "features": [
+    "hour",
+    "day_of_week",
+    "month",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "is_weekend",
+    "is_peak_hour",
+    "morning_peak",
+    "evening_peak",
+    "road_length_m",
+    "road_length_log",
+    "lane_count",
+    "speed_limit_kmh",
+    "lane_speed_product",
+    "lane_length_product",
+    "speed_length_product",
+    "is_oneway",
+    "is_bridge",
+    "is_tunnel",
+    "node_degree",
+    "connected_road_count",
+    "node_degree_log",
+    "connected_road_log",
+    "roadlen_hour",
+    "dow_hour",
+    "lane_is_peak_num",
+    "speed_is_peak_num",
+    "highway"
+  ],
+  "categorical_encoding": {
+    "xgboost": "native categorical (enable_categorical=True), category order = sorted",
+    "linear_randomforest": "one-hot via pd.get_dummies"
+  },
+  "split_dates": {
+    "train": [
+      "2024-01-01",
+      "2024-04-30"
+    ],
+    "validation": [
+      "2024-05-01",
+      "2024-06-15"
+    ],
+    "test": [
+      "2024-06-16",
+      "2024-07-18"
+    ]
+  },
+  "split_rows": {
+    "train": 5146130,
+    "validation": 1956380,
+    "test": 1403490
+  },
+  "xgboost_params": {
+    "n_estimators": 1500,
+    "learning_rate": 0.05,
+    "max_depth": 9,
+    "min_child_weight": 5,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_lambda": 1.0,
+    "tree_method": "hist",
+    "enable_categorical": true,
+    "random_state": 42,
+    "n_jobs": -1,
+    "objective": "reg:squarederror",
+    "early_stopping_rounds": 60,
+    "eval_metric": "rmse"
+  },
+  "mape_excluded_reason": "36.8% zero-volume rows -> division by zero",
+  "results_preview": [
+    {
+      "model": "mean_baseline",
+      "split": "validation",
+      "MAE": 1650.0552988372542,
+      "RMSE": 2960.152550913727,
+      "R2": -4.3194345755281915e-05
+    },
+    {
+      "model": "mean_baseline",
+      "split": "test",
+      "MAE": 1686.5481397982423,
+      "RMSE": 3050.246090806557,
+      "R2": -0.00012323350544640732
+    },
+    {
+      "model": "median_baseline",
+      "split": "validation",
+      "MAE": 1270.1616091965773,
+      "RMSE": 3172.3214586885824,
+      "R2": -0.14853689473037268
+    },
+    {
+      "model": "median_baseline",
+      "split": "test",
+      "MAE": 1322.8516711911022,
+      "RMSE": 3275.490642738686,
+      "R2": -0.1532845767906399
+    },
+    {
+      "model": "XGBoost",
+      "split": "train",
+      "MAE": 368.3717956542969,
+      "RMSE": 810.0715631967339,
+      "R2": 0.9267695546150208
+    },
+    {
+      "model": "XGBoost",
+      "split": "validation",
+      "MAE": 372.9576416015625,
+      "RMSE": 826.8402203569925,
+      "R2": 0.9219750165939331
+    },
+    {
+      "model": "XGBoost",
+      "split": "test",
+      "MAE": 392.4925537109375,
+      "RMSE": 870.7427863611618,
+      "R2": 0.9184988737106323
+    },
+    {
+      "model": "LinearRegression",
+      "split": "validation",
+      "MAE": 1649.9317626953125,
+      "RMSE": 2960.092903947442,
+      "R2": -2.9802322387695312e-06
+    },
+    {
+      "model": "LinearRegression",
+      "split": "test",
+      "MAE": 1686.4249267578125,
+      "RMSE": 3050.1849124274418,
+      "R2": -8.308887481689453e-05
+    },
+    {
+      "model": "RandomForest",
+      "split": "validation",
+      "MAE": 475.97924691998173,
+      "RMSE": 970.4878061391522,
+      "R2": 0.8925093376961306
+    },
+    {
+      "model": "RandomForest",
+      "split": "test",
+      "MAE": 492.4114711406422,
+      "RMSE": 1003.3830223753238,
+      "R2": 0.8917775766470073
+    }
+  ],
+  "top10_features_gain": [
+    "lane_is_peak_num",
+    "lane_count",
+    "speed_is_peak_num",
+    "lane_speed_product",
+    "highway",
+    "speed_limit_kmh",
+    "road_length_log",
+    "road_length_m",
+    "node_degree",
+    "speed_length_product"
+  ]
+}

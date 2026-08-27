@@ -1,0 +1,90 @@
+{
+  "features_v2": [
+    "hour",
+    "day_of_week",
+    "month",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "is_weekend",
+    "is_peak_hour",
+    "morning_peak",
+    "evening_peak",
+    "road_length_m",
+    "road_length_log",
+    "lane_count",
+    "speed_limit_kmh",
+    "lane_speed_product",
+    "is_oneway",
+    "is_bridge",
+    "is_tunnel",
+    "node_degree",
+    "connected_road_count",
+    "highway",
+    "lane_road_product",
+    "speed_length_product",
+    "from_node_degree",
+    "to_node_degree",
+    "node_connectivity_min",
+    "node_connectivity_max",
+    "hierarchy_level",
+    "lanes_peak",
+    "speed_peak",
+    "length_x_hour",
+    "highway_hour",
+    "highway_peak",
+    "highway_weekend",
+    "dow_hour"
+  ],
+  "groups": {
+    "road_extra": [
+      "lane_road_product",
+      "speed_length_product"
+    ],
+    "network": [
+      "from_node_degree",
+      "to_node_degree",
+      "node_connectivity_min",
+      "node_connectivity_max",
+      "hierarchy_level"
+    ],
+    "temporal_interactions": [
+      "lanes_peak",
+      "speed_peak",
+      "length_x_hour",
+      "highway_hour",
+      "highway_peak",
+      "highway_weekend",
+      "dow_hour"
+    ]
+  },
+  "base_features": [
+    "hour",
+    "day_of_week",
+    "month",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "is_weekend",
+    "is_peak_hour",
+    "morning_peak",
+    "evening_peak",
+    "road_length_m",
+    "road_length_log",
+    "lane_count",
+    "speed_limit_kmh",
+    "lane_speed_product",
+    "is_oneway",
+    "is_bridge",
+    "is_tunnel",
+    "node_degree",
+    "connected_road_count",
+    "highway"
+  ],
+  "provenance": {
+    "node_degree": "distinct-edge count per OSM node (static topology, prediction-time available)",
+    "hierarchy_level": "derived from highway via fixed mapping"
+  }
+}

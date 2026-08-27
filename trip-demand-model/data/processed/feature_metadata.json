@@ -1,0 +1,93 @@
+{
+  "target": "traffic_volume",
+  "id_cols": [
+    "road_id"
+  ],
+  "numeric_features": [
+    "hour",
+    "day_of_week",
+    "month",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "is_weekend",
+    "is_peak_hour",
+    "morning_peak",
+    "evening_peak",
+    "road_length_m",
+    "road_length_log",
+    "lane_count",
+    "speed_limit_kmh",
+    "lane_speed_product",
+    "lane_length_product",
+    "speed_length_product",
+    "is_oneway",
+    "is_bridge",
+    "is_tunnel",
+    "node_degree",
+    "connected_road_count",
+    "node_degree_log",
+    "connected_road_log",
+    "roadlen_hour",
+    "dow_hour",
+    "lane_is_peak_num",
+    "speed_is_peak_num"
+  ],
+  "categorical_features": [
+    "highway"
+  ],
+  "features": [
+    "hour",
+    "day_of_week",
+    "month",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "is_weekend",
+    "is_peak_hour",
+    "morning_peak",
+    "evening_peak",
+    "road_length_m",
+    "road_length_log",
+    "lane_count",
+    "speed_limit_kmh",
+    "lane_speed_product",
+    "lane_length_product",
+    "speed_length_product",
+    "is_oneway",
+    "is_bridge",
+    "is_tunnel",
+    "node_degree",
+    "connected_road_count",
+    "node_degree_log",
+    "connected_road_log",
+    "roadlen_hour",
+    "dow_hour",
+    "lane_is_peak_num",
+    "speed_is_peak_num",
+    "highway"
+  ],
+  "drop_reason": {
+    "intersection_density": "constant column (2.2116454 in all rows)",
+    "highway_code": "arbitrary ordinal re-encoding of highway",
+    "volume_capacity_ratio/congestion_level/road_capacity_proxy": "already excluded upstream; target-derived (see leakage_audit.md)"
+  },
+  "split_dates": {
+    "train": [
+      "2024-01-01",
+      "2024-04-30"
+    ],
+    "validation": [
+      "2024-05-01",
+      "2024-06-15"
+    ],
+    "test": [
+      "2024-06-16",
+      "2024-07-18"
+    ]
+  },
+  "random_seed": 42,
+  "n_rows": 8506000
+}

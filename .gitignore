@@ -16,12 +16,39 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Excluded large generated dataset files (>100MB)
-traffic-model/data/processed/synthetic_traffic.csv
-traffic-model/data/processed/synthetic_traffic.gpkg
-*.csv.gz
-*.gpkg.tmp
-
 # Logs and environment files
 *.log
 .env
+
+# === traffic-model exclusions ===
+traffic-model/data/processed/synthetic_traffic.csv
+traffic-model/data/processed/synthetic_traffic.gpkg
+*.gpkg.tmp
+
+# === trip-demand-model: large generated/regenerable files ===
+# Large model artifacts (>60MB each) — regenerate with training pipeline
+trip-demand-model/models/traffic_xgboost_model.json
+trip-demand-model/models/traffic_xgboost_model_baseline_v1.json
+trip-demand-model/data/experiments/xgb_tuned.json
+trip-demand-model/data/experiments/xgb_allfeats.json
+trip-demand-model/data/experiments/xgb_temporalint.json
+trip-demand-model/data/experiments/xgb_network.json
+trip-demand-model/data/experiments/xgb_roadextra.json
+trip-demand-model/data/experiments/twostage_regressor.json
+trip-demand-model/data/experiments/twostage_classifier.json
+trip-demand-model/data/experiments/val_xgb_*.npy
+trip-demand-model/data/experiments/test_xgb_*.npy
+
+# Large processed data — regenerate with feature engineering
+trip-demand-model/data/processed/traffic_ml_clean.csv
+trip-demand-model/data/processed/traffic_ml_clean.parquet
+trip-demand-model/data/processed/traffic_ml_features_v2.parquet
+
+# Large raw data — source of truth, stored locally only
+trip-demand-model/data/raw/synthetic_road_traffic.csv.gz
+trip-demand-model/data/raw/traffic_ml_dataset.csv.gz
+trip-demand-model/data/raw/od_matrix.csv.gz
+trip-demand-model/data/raw/trip_production_300k.csv
+
+# Backup directory — local only
+trip-demand-model/files 5/

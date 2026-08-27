@@ -1,0 +1,425 @@
+{
+  "xgb_roadextra": {
+    "features": [
+      "hour",
+      "day_of_week",
+      "month",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos",
+      "is_weekend",
+      "is_peak_hour",
+      "morning_peak",
+      "evening_peak",
+      "road_length_m",
+      "road_length_log",
+      "lane_count",
+      "speed_limit_kmh",
+      "lane_speed_product",
+      "is_oneway",
+      "is_bridge",
+      "is_tunnel",
+      "node_degree",
+      "connected_road_count",
+      "highway",
+      "lane_road_product",
+      "speed_length_product"
+    ],
+    "val": {
+      "MAE": 378.9319206803419,
+      "RMSE": 853.4722172593542,
+      "R2": 0.9168677855322368
+    },
+    "test": {
+      "MAE": 398.7825546038228,
+      "RMSE": 898.280427820688,
+      "R2": 0.9132623538550846
+    },
+    "training_time_s": 321.3,
+    "params": "baseline_xgb_params",
+    "notes": "V1 + roadextra feature group"
+  },
+  "xgb_temporalint": {
+    "features": [
+      "hour",
+      "day_of_week",
+      "month",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos",
+      "is_weekend",
+      "is_peak_hour",
+      "morning_peak",
+      "evening_peak",
+      "road_length_m",
+      "road_length_log",
+      "lane_count",
+      "speed_limit_kmh",
+      "lane_speed_product",
+      "is_oneway",
+      "is_bridge",
+      "is_tunnel",
+      "node_degree",
+      "connected_road_count",
+      "highway",
+      "lanes_peak",
+      "speed_peak",
+      "length_x_hour",
+      "highway_hour",
+      "highway_peak",
+      "highway_weekend",
+      "dow_hour"
+    ],
+    "val": {
+      "MAE": 474.4359504212323,
+      "RMSE": 997.9036872733554,
+      "R2": 0.8863504219808346
+    },
+    "test": {
+      "MAE": 498.3424212964266,
+      "RMSE": 1044.6110334976127,
+      "R2": 0.882701360409071
+    },
+    "training_time_s": 5196.2,
+    "params": "baseline_xgb_params",
+    "notes": "V1 + temporalint feature group"
+  },
+  "xgb_network": {
+    "features": [
+      "hour",
+      "day_of_week",
+      "month",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos",
+      "is_weekend",
+      "is_peak_hour",
+      "morning_peak",
+      "evening_peak",
+      "road_length_m",
+      "road_length_log",
+      "lane_count",
+      "speed_limit_kmh",
+      "lane_speed_product",
+      "is_oneway",
+      "is_bridge",
+      "is_tunnel",
+      "node_degree",
+      "connected_road_count",
+      "highway",
+      "from_node_degree",
+      "to_node_degree",
+      "node_connectivity_min",
+      "node_connectivity_max",
+      "hierarchy_level"
+    ],
+    "val": {
+      "MAE": 379.28003487636056,
+      "RMSE": 879.724373341003,
+      "R2": 0.9116749642438132
+    },
+    "test": {
+      "MAE": 398.2479916196336,
+      "RMSE": 923.7829730717411,
+      "R2": 0.9082674081771049
+    },
+    "training_time_s": 295.0,
+    "params": "baseline_xgb_params",
+    "notes": "V1 + network feature group"
+  },
+  "xgb_allfeats": {
+    "features": [
+      "hour",
+      "day_of_week",
+      "month",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos",
+      "is_weekend",
+      "is_peak_hour",
+      "morning_peak",
+      "evening_peak",
+      "road_length_m",
+      "road_length_log",
+      "lane_count",
+      "speed_limit_kmh",
+      "lane_speed_product",
+      "is_oneway",
+      "is_bridge",
+      "is_tunnel",
+      "node_degree",
+      "connected_road_count",
+      "highway",
+      "lane_road_product",
+      "speed_length_product",
+      "from_node_degree",
+      "to_node_degree",
+      "node_connectivity_min",
+      "node_connectivity_max",
+      "hierarchy_level",
+      "lanes_peak",
+      "speed_peak",
+      "length_x_hour",
+      "highway_hour",
+      "highway_peak",
+      "highway_weekend",
+      "dow_hour"
+    ],
+    "val": {
+      "MAE": 325.0674035079091,
+      "RMSE": 740.3289337622086,
+      "R2": 0.9374481701606463
+    },
+    "test": {
+      "MAE": 343.3479692495219,
+      "RMSE": 786.8204197995286,
+      "R2": 0.9334520008194145
+    },
+    "training_time_s": 352.4,
+    "params": "baseline_xgb_params",
+    "notes": "V1 + allfeats feature group"
+  },
+  "xgb_logtarget": {
+    "features": [
+      "hour",
+      "day_of_week",
+      "month",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos",
+      "is_weekend",
+      "is_peak_hour",
+      "morning_peak",
+      "evening_peak",
+      "road_length_m",
+      "road_length_log",
+      "lane_count",
+      "speed_limit_kmh",
+      "lane_speed_product",
+      "is_oneway",
+      "is_bridge",
+      "is_tunnel",
+      "node_degree",
+      "connected_road_count",
+      "highway",
+      "lane_road_product",
+      "speed_length_product",
+      "from_node_degree",
+      "to_node_degree",
+      "node_connectivity_min",
+      "node_connectivity_max",
+      "hierarchy_level",
+      "lanes_peak",
+      "speed_peak",
+      "length_x_hour",
+      "highway_hour",
+      "highway_peak",
+      "highway_weekend",
+      "dow_hour"
+    ],
+    "val": {
+      "MAE": 359.8969008594552,
+      "RMSE": 1051.9894157636056,
+      "R2": 0.8736971025830862
+    },
+    "test": {
+      "MAE": 379.9995863487497,
+      "RMSE": 1098.9465472346506,
+      "R2": 0.8701814076644832
+    },
+    "training_time_s": 357.3,
+    "params": "baseline_xgb_params + log1p/expm1",
+    "notes": "trained in log space, evaluated on raw scale"
+  },
+  "_best_feature_variant": "xgb_allfeats",
+  "xgb_tuned": {
+    "features": [
+      "hour",
+      "day_of_week",
+      "month",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos",
+      "is_weekend",
+      "is_peak_hour",
+      "morning_peak",
+      "evening_peak",
+      "road_length_m",
+      "road_length_log",
+      "lane_count",
+      "speed_limit_kmh",
+      "lane_speed_product",
+      "is_oneway",
+      "is_bridge",
+      "is_tunnel",
+      "node_degree",
+      "connected_road_count",
+      "highway",
+      "lane_road_product",
+      "speed_length_product",
+      "from_node_degree",
+      "to_node_degree",
+      "node_connectivity_min",
+      "node_connectivity_max",
+      "hierarchy_level",
+      "lanes_peak",
+      "speed_peak",
+      "length_x_hour",
+      "highway_hour",
+      "highway_peak",
+      "highway_weekend",
+      "dow_hour"
+    ],
+    "val": {
+      "MAE": 243.78692062996177,
+      "RMSE": 702.5972279921087,
+      "R2": 0.94366173907861
+    },
+    "test": {
+      "MAE": 259.0313787661091,
+      "RMSE": 748.0437418876454,
+      "R2": 0.9398497071765363
+    },
+    "training_time_s": 422.7,
+    "params": "{\"max_depth\": 12, \"min_child_weight\": 1, \"learning_rate\": 0.05, \"subsample\": 1.0, \"colsample_bytree\": 1.0, \"gamma\": 0, \"reg_alpha\": 1.0, \"reg_lambda\": 1.0}",
+    "search_trials": [
+      {
+        "cfg": {
+          "max_depth": 12,
+          "min_child_weight": 1,
+          "learning_rate": 0.05,
+          "subsample": 1.0,
+          "colsample_bytree": 1.0,
+          "gamma": 0,
+          "reg_alpha": 1.0,
+          "reg_lambda": 1.0
+        },
+        "val_RMSE": 731.2179197042235
+      },
+      {
+        "cfg": {
+          "max_depth": 12,
+          "min_child_weight": 10,
+          "learning_rate": 0.05,
+          "subsample": 0.8,
+          "colsample_bytree": 0.7,
+          "gamma": 0,
+          "reg_alpha": 0.1,
+          "reg_lambda": 5.0
+        },
+        "val_RMSE": 739.1808657141946
+      },
+      {
+        "cfg": {
+          "max_depth": 12,
+          "min_child_weight": 5,
+          "learning_rate": 0.05,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "gamma": 1.0,
+          "reg_alpha": 0.1,
+          "reg_lambda": 1.0
+        },
+        "val_RMSE": 741.5678122388392
+      },
+      {
+        "cfg": {
+          "max_depth": 12,
+          "min_child_weight": 3,
+          "learning_rate": 0.05,
+          "subsample": 0.7,
+          "colsample_bytree": 1.0,
+          "gamma": 0,
+          "reg_alpha": 1.0,
+          "reg_lambda": 1.0
+        },
+        "val_RMSE": 755.981447361932
+      },
+      {
+        "cfg": {
+          "max_depth": 10,
+          "min_child_weight": 3,
+          "learning_rate": 0.05,
+          "subsample": 1.0,
+          "colsample_bytree": 1.0,
+          "gamma": 0.5,
+          "reg_alpha": 1.0,
+          "reg_lambda": 10.0
+        },
+        "val_RMSE": 783.6826394500625
+      },
+      {
+        "cfg": {
+          "max_depth": 12,
+          "min_child_weight": 1,
+          "learning_rate": 0.03,
+          "subsample": 0.7,
+          "colsample_bytree": 0.9,
+          "gamma": 0.1,
+          "reg_alpha": 1.0,
+          "reg_lambda": 1.0
+        },
+        "val_RMSE": 784.0388297718727
+      },
+      {
+        "cfg": {
+          "max_depth": 10,
+          "min_child_weight": 1,
+          "learning_rate": 0.05,
+          "subsample": 0.9,
+          "colsample_bytree": 0.7,
+          "gamma": 0.1,
+          "reg_alpha": 1.0,
+          "reg_lambda": 10.0
+        },
+        "val_RMSE": 793.7919364255654
+      },
+      {
+        "cfg": {
+          "max_depth": 12,
+          "min_child_weight": 3,
+          "learning_rate": 0.03,
+          "subsample": 0.7,
+          "colsample_bytree": 0.9,
+          "gamma": 0.5,
+          "reg_alpha": 1.0,
+          "reg_lambda": 10.0
+        },
+        "val_RMSE": 798.8200317010841
+      },
+      {
+        "cfg": {
+          "max_depth": 10,
+          "min_child_weight": 3,
+          "learning_rate": 0.05,
+          "subsample": 0.7,
+          "colsample_bytree": 0.7,
+          "gamma": 1.0,
+          "reg_alpha": 0,
+          "reg_lambda": 10.0
+        },
+        "val_RMSE": 811.415176130703
+      },
+      {
+        "cfg": {
+          "max_depth": 12,
+          "min_child_weight": 5,
+          "learning_rate": 0.02,
+          "subsample": 0.7,
+          "colsample_bytree": 0.8,
+          "gamma": 0.1,
+          "reg_alpha": 1.0,
+          "reg_lambda": 5.0
+        },
+        "val_RMSE": 844.7783051803419
+      }
+    ],
+    "notes": "randomized 24-trial search on 2.5M-row train subsample, ranked on full validation; final refit on full train"
+  }
+}
