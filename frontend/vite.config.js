@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
-const scriptPath = path.resolve(projectRoot, 'traffic-model', 'scripts', 'run_simulation_cli.py');
+const scriptPath = path.resolve(projectRoot, 'models', 'traffic-model', 'scripts', 'run_simulation_cli.py');
 
 /**
  * Custom Vite Plugin to proxy POST /api/simulate requests directly to the Python backend simulator.

@@ -5,7 +5,7 @@
  * OSM zone centroid from zone_osm_mapping_v2.csv using the Haversine formula.
  */
 
-import { ZONE_DATASETS } from './zonesData.js';
+import { ZONE_DATASETS } from '../data/zonesData.js';
 
 const EARTH_RADIUS_KM = 6371.0;
 
