@@ -8,6 +8,59 @@ import {
 import { resolveNearestZone } from './zoneResolver.js';
 
 /**
+ * Default origin reference point (Cairo / NAC study area center).
+ */
+export const DEFAULT_ORIGIN = { latitude: 30.015, longitude: 31.735 };
+
+/**
+ * Converts a WGS84 (latitude, longitude) coordinate to a local Tangent Plane ENU
+ * metric coordinate system (x=East in meters, y=North in meters) centered at origin.
+ */
+export function wgs84ToLocalENU(latitude, longitude, originLat = DEFAULT_ORIGIN.latitude, originLon = DEFAULT_ORIGIN.longitude) {
+  const rLat = (originLat * Math.PI) / 180.0;
+  const dLat = ((latitude - originLat) * Math.PI) / 180.0;
+  const dLon = ((longitude - originLon) * Math.PI) / 180.0;
+
+  const R = 6371000.0;
+  const x = dLon * R * Math.cos(rLat);
+  const y = dLat * R;
+
+  return { x, y };
+}
+
+/**
+ * Converts a local Tangent Plane ENU metric coordinate (x=East meters, y=North meters)
+ * back to WGS84 (latitude, longitude) centered at origin.
+ */
+export function localENUToWgs84(x, y, originLat = DEFAULT_ORIGIN.latitude, originLon = DEFAULT_ORIGIN.longitude) {
+  const rLat = (originLat * Math.PI) / 180.0;
+  const R = 6371000.0;
+
+  const dLat = y / R;
+  const dLon = x / (R * Math.cos(rLat));
+
+  const latitude = originLat + (dLat * 180.0) / Math.PI;
+  const longitude = originLon + (dLon * 180.0) / Math.PI;
+
+  return { latitude, longitude };
+}
+
+/**
+ * Rotates a 2D metric point (x, y) around origin (0, 0) by heading angle thetaDegrees (in degrees).
+ */
+export function rotateMetricPoint(x, y, thetaDegrees = 0) {
+  if (!thetaDegrees) return { x, y };
+  const rad = (thetaDegrees * Math.PI) / 180.0;
+  const cosT = Math.cos(rad);
+  const sinT = Math.sin(rad);
+
+  return {
+    x: x * cosT - y * sinT,
+    y: x * sinT + y * cosT,
+  };
+}
+
+/**
  * Converts a Cesium Cartesian3 3D position to Geographic { longitude, latitude, height } (in degrees & meters).
  */
 export function cartesianToLonLat(cartesian) {
@@ -76,12 +129,29 @@ export function pointToSegmentDistanceMeters(pLat, pLon, aLat, aLon, bLat, bLon)
 }
 
 /**
+ * Distance in meters from point P(px, py) to line segment A(ax, ay) -> B(bx, by) in 2D metric space.
+ */
+export function metricPointToSegmentDistance(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+
+  if (lenSq < 1e-6) {
+    return Math.hypot(px - ax, py - ay);
+  }
+
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  const projX = ax + t * dx;
+  const projY = ay + t * dy;
+
+  return Math.hypot(px - projX, py - projY);
+}
+
+/**
  * Geographic 3D Position Picker with safe fallback chain:
  * 1. scene.pickPosition(windowPosition)
  * 2. globe.pick(ray, scene)
  * 3. pickEllipsoid(windowPosition)
- *
- * Temporarily hides preview entity during pickPosition to prevent self-picking height jump.
  */
 export function pickGeographicLocation(viewer, clientX, clientY, previewEntity = null) {
   if (!viewer || !viewer.scene) return null;
@@ -102,7 +172,6 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
 
   const windowPosition = new Cartesian2(clientX - rect.left, clientY - rect.top);
 
-  // Temporarily hide preview entity during pickPosition to prevent height jump
   let wasPreviewVisible = false;
   if (previewEntity) {
     wasPreviewVisible = previewEntity.show;
@@ -112,10 +181,8 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
   let cartesian = null;
 
   try {
-    // 1. Pick 3D Building / Tileset surface
     cartesian = viewer.scene.pickPosition(windowPosition);
 
-    // 2. Fallback: Globe terrain raycast
     if (!cartesian && viewer.scene.globe) {
       const ray = viewer.camera.getPickRay(windowPosition);
       if (ray) {
@@ -123,7 +190,6 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
       }
     }
 
-    // 3. Fallback: Ellipsoid surface picking
     if (!cartesian && viewer.scene.globe) {
       cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid);
     }
@@ -144,6 +210,7 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
     latitude: lonLat.latitude,
     longitude: lonLat.longitude,
     height: lonLat.height,
+    terrainHeight: lonLat.terrainHeight,
     zone_id: resolved.zone_id,
     distance_km: resolved.distance_km,
     cartesian,

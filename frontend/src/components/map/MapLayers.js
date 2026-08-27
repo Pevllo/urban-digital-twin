@@ -7,9 +7,14 @@ import {
 } from 'cesium';
 
 import spatialData from '../../data/spatialFeatures.json';
+import { ROAD_WIDTH_BY_TYPE, getDatasetDiagnostics } from '../../utils/buildabilityEngine.js';
 
 export async function loadMapLayers(viewer) {
   if (!viewer) return;
+
+  // Log Dataset Diagnostics
+  const diag = getDatasetDiagnostics(spatialData);
+  console.log('[GIS Pipeline Audit]:', diag);
 
   // 1. Load and Style 3D OSM Buildings
   try {
@@ -29,11 +34,17 @@ export async function loadMapLayers(viewer) {
     console.warn('[MapLayers] OSM 3D Buildings load fallback:', e);
   }
 
-  // 2. Render Road Network Polyline Glows
-  if (spatialData && spatialData.roads) {
-    spatialData.roads.forEach((roadSeg, idx) => {
+  // 2. Render Road Network Polylines (Consuming exact normalized road dataset)
+  const roads = spatialData?.roads || [];
+  if (Array.isArray(roads) && roads.length > 0) {
+    roads.forEach((roadFeature) => {
+      const rawCoords = roadFeature.coordinates || roadFeature;
+      if (!Array.isArray(rawCoords) || rawCoords.length < 2) return;
+
       const flatPositions = [];
-      roadSeg.forEach(([rLat, rLon]) => {
+      rawCoords.forEach((pt) => {
+        const rLat = Array.isArray(pt) ? pt[0] : pt.latitude;
+        const rLon = Array.isArray(pt) ? pt[1] : pt.longitude;
         if (typeof rLat === 'number' && typeof rLon === 'number' && !Number.isNaN(rLat) && !Number.isNaN(rLon)) {
           flatPositions.push(rLon, rLat);
         }
@@ -41,17 +52,25 @@ export async function loadMapLayers(viewer) {
 
       if (flatPositions.length < 4) return;
 
-      const isMajor = idx % 5 === 0;
+      const hwType = roadFeature.highway || 'default';
+      const baseWidth = ROAD_WIDTH_BY_TYPE[hwType] || 5.0;
+
+      const isMajor = ['motorway', 'trunk', 'primary', 'secondary'].includes(hwType);
+      const isMedium = ['tertiary', 'unclassified'].includes(hwType);
+
+      const renderWidth = isMajor ? Math.min(6, Math.max(4, baseWidth * 0.5)) : (isMedium ? 3.0 : 1.8);
+      const renderColor = isMajor ? '#38bdf8' : (isMedium ? '#60a5fa' : '#475569');
+
       viewer.entities.add({
         polyline: {
           positions: Cartesian3.fromDegreesArray(flatPositions),
-          width: isMajor ? 5 : 2.5,
+          width: renderWidth,
           material: isMajor
             ? new PolylineGlowMaterialProperty({
-                glowPower: 0.25,
+                glowPower: 0.2,
                 color: Color.fromCssColorString('#38bdf8'),
               })
-            : Color.fromCssColorString('#475569'),
+            : Color.fromCssColorString(renderColor),
           clampToGround: true,
         },
       });

@@ -156,6 +156,7 @@ export function createDevelopmentModel(raw) {
     footprint: { width, length },
     floors,
     buildingHeight: height,
+    orientation: Number(raw.orientation || props.orientation || 0),
     capacity: props.num_residents || props.num_beds || props.visitor_capacity || props.num_students || props.num_employees || 0,
     residents: props.num_residents || 0,
     jobs: props.num_employees || props.staff_count || 0,

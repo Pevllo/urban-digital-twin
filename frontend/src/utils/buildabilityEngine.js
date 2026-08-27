@@ -1,28 +1,75 @@
 import spatialData from '../data/spatialFeatures.json';
-import { haversineDistanceMeters, pointToSegmentDistanceMeters } from './geoUtils.js';
+import {
+  wgs84ToLocalENU,
+  localENUToWgs84,
+  rotateMetricPoint,
+  metricPointToSegmentDistance,
+  haversineDistanceMeters,
+} from './geoUtils.js';
 import { createDevelopmentModel, SUPPORTED_DEV_TYPES } from '../types/development.js';
 
-// Configurable Real-World Setback Clearance (in Meters)
+/**
+ * Road Widths by OSM Highway Classification (in Meters).
+ */
+export const ROAD_WIDTH_BY_TYPE = {
+  motorway: 14.0,
+  motorway_link: 10.0,
+  trunk: 12.0,
+  trunk_link: 9.0,
+  primary: 10.0,
+  primary_link: 8.0,
+  secondary: 8.0,
+  secondary_link: 7.0,
+  tertiary: 7.0,
+  tertiary_link: 6.0,
+  residential: 6.0,
+  unclassified: 5.0,
+  service: 4.0,
+  living_street: 4.0,
+  construction: 6.0,
+  default: 5.0,
+};
+
 export const ROAD_CLEARANCE_METERS = 5.0;
 export const BUILDING_CLEARANCE_METERS = 5.0;
 export const DEVELOPMENT_CLEARANCE_METERS = 5.0;
 
 /**
+ * Diagnostics reporter for loaded GIS dataset.
+ */
+export function getDatasetDiagnostics(spatialDataset = spatialData) {
+  const roads = spatialDataset?.roads || [];
+  const buildings = spatialDataset?.buildings || [];
+
+  const highwayCounts = {};
+  roads.forEach((r) => {
+    const hw = r.highway || 'unknown';
+    highwayCounts[hw] = (highwayCounts[hw] || 0) + 1;
+  });
+
+  return {
+    totalRoadsLoaded: roads.length,
+    totalBuildingsLoaded: buildings.length,
+    highwayCounts,
+    extent: getCityExtent(spatialDataset),
+  };
+}
+
+/**
  * Computes dynamic geographic bounding box extent from currently loaded spatial dataset.
- * Returns null if dataset has no spatial geometry.
  */
 export function getCityExtent(spatialDataset = spatialData) {
-  if (!spatialDataset || !spatialDataset.roads || !Array.isArray(spatialDataset.roads) || spatialDataset.roads.length === 0) {
-    return null;
-  }
+  const roads = spatialDataset?.roads || [];
+  if (!Array.isArray(roads) || roads.length === 0) return null;
 
-  let minLat = 90.0;
-  let maxLat = -90.0;
-  let minLon = 180.0;
-  let maxLon = -180.0;
+  let minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0;
 
-  for (const seg of spatialDataset.roads) {
-    for (const [rLat, rLon] of seg) {
+  for (const road of roads) {
+    const coords = road.coordinates || road;
+    if (!Array.isArray(coords)) continue;
+    for (const pt of coords) {
+      const rLat = Array.isArray(pt) ? pt[0] : pt.latitude;
+      const rLon = Array.isArray(pt) ? pt[1] : pt.longitude;
       if (rLat < minLat) minLat = rLat;
       if (rLat > maxLat) maxLat = rLat;
       if (rLon < minLon) minLon = rLon;
@@ -30,7 +77,7 @@ export function getCityExtent(spatialDataset = spatialData) {
     }
   }
 
-  // 500m (~0.0045 deg) study area buffer around spatial network
+  // 500m (~0.0045 deg) study area buffer
   const buf = 0.0045;
   return {
     minLat: minLat - buf,
@@ -41,64 +88,63 @@ export function getCityExtent(spatialDataset = spatialData) {
 }
 
 /**
- * Calculates geographic corner coordinates of a rectangular footprint (W x L in meters)
- * centered at (lat, lon).
+ * Generates local ENU metric corner coordinates (in meters) for a rectangular footprint
+ * centered at (centerENU.x, centerENU.y) with width, length, and rotation angle (degrees).
  */
-export function getFootprintCorners(lat, lon, widthMeters, lengthMeters) {
-  const latOffset = (lengthMeters / 2.0) / 111000.0;
-  const lonOffset = (widthMeters / 2.0) / (111000.0 * Math.cos((lat * Math.PI) / 180.0));
+export function getMetricFootprintCorners(centerENU, widthMeters, lengthMeters, orientationDegrees = 0) {
+  const hw = widthMeters / 2.0;
+  const hl = lengthMeters / 2.0;
 
-  return [
-    { lat: lat + latOffset, lon: lon - lonOffset }, // Top-Left
-    { lat: lat + latOffset, lon: lon + lonOffset }, // Top-Right
-    { lat: lat - latOffset, lon: lon + lonOffset }, // Bottom-Right
-    { lat: lat - latOffset, lon: lon - lonOffset }, // Bottom-Left
+  const rawCorners = [
+    { x: -hw, y: hl },  // Top-Left
+    { x: hw, y: hl },   // Top-Right
+    { x: hw, y: -hl },  // Bottom-Right
+    { x: -hw, y: -hl }, // Bottom-Left
   ];
+
+  return rawCorners.map((pt) => {
+    const rot = rotateMetricPoint(pt.x, pt.y, orientationDegrees);
+    return {
+      x: centerENU.x + rot.x,
+      y: centerENU.y + rot.y,
+    };
+  });
 }
 
 /**
- * Calculates axis-aligned bounding box (AABB) in degrees for a development footprint.
+ * Calculates metric AABB bounding box (minX, maxX, minY, maxY in meters) for a footprint.
  */
-export function getFootprintAABB(lat, lon, widthMeters, lengthMeters, clearanceMeters = 0.0) {
-  const totalLength = lengthMeters + clearanceMeters * 2.0;
-  const totalWidth = widthMeters + clearanceMeters * 2.0;
-
-  const latOffset = (totalLength / 2.0) / 111000.0;
-  const lonOffset = (totalWidth / 2.0) / (111000.0 * Math.cos((lat * Math.PI) / 180.0));
-
+export function getMetricAABB(cornersENU, clearanceMeters = 0.0) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const pt of cornersENU) {
+    if (pt.x < minX) minX = pt.x;
+    if (pt.x > maxX) maxX = pt.x;
+    if (pt.y < minY) minY = pt.y;
+    if (pt.y > maxY) maxY = pt.y;
+  }
   return {
-    minLat: lat - latOffset,
-    maxLat: lat + latOffset,
-    minLon: lon - lonOffset,
-    maxLon: lon + lonOffset,
+    minX: minX - clearanceMeters,
+    maxX: maxX + clearanceMeters,
+    minY: minY - clearanceMeters,
+    maxY: maxY + clearanceMeters,
   };
 }
 
 /**
- * Tests whether two footprint AABBs overlap.
+ * Checks whether two 2D metric AABBs overlap.
  */
-export function aabbsOverlap(boxA, boxB) {
+export function metricAABBsOverlap(boxA, boxB) {
   return !(
-    boxA.maxLat < boxB.minLat ||
-    boxA.minLat > boxB.maxLat ||
-    boxA.maxLon < boxB.minLon ||
-    boxA.minLon > boxB.maxLon
+    boxA.maxX < boxB.minX ||
+    boxA.minX > boxB.maxX ||
+    boxA.maxY < boxB.minY ||
+    boxA.minY > boxB.maxY
   );
 }
 
 /**
- * Validates development placement against dynamic city boundaries, road network,
- * existing building footprints, and placed developments using footprint geometry.
- *
- * Returns uniform validation structure:
- * {
- *   valid: boolean,
- *   reason: string | null,
- *   conflictType: "none" | "invalid_coordinates" | "outside_city_bounds" | "road_collision" | "building_collision" | "development_collision",
- *   coordinates: { longitude, latitude, terrainHeight },
- *   dimensions: { width, length, height, buildingHeight },
- *   allowedTypes: string[]
- * }
+ * Validates development placement against city extent, road network, buildings, and placed developments
+ * using Local Tangent Plane ENU metric geometry (1 unit = 1 meter).
  */
 export function validateBuildability(lat, lon, devType, existingDevs = [], properties = {}, buildingHeightOverride = 0) {
   if (typeof lat !== 'number' || typeof lon !== 'number' || Number.isNaN(lat) || Number.isNaN(lon)) {
@@ -122,8 +168,10 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
 
   const dims = model.footprint;
   const bldgHeight = model.buildingHeight || model.height || 15;
+  const orientation = model.orientation || 0;
+
   const resultCoords = { longitude: lon, latitude: lat, terrainHeight: model.z || 0.0 };
-  const resultDims = { width: dims.width, length: dims.length, height: bldgHeight, buildingHeight: bldgHeight };
+  const resultDims = { width: dims.width, length: dims.length, height: bldgHeight, buildingHeight: bldgHeight, orientation };
   const allowedTypes = Object.keys(SUPPORTED_DEV_TYPES);
 
   // 1. Dynamic City Extent Check
@@ -150,35 +198,73 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     };
   }
 
-  const proposedAABB = getFootprintAABB(lat, lon, dims.width, dims.length, ROAD_CLEARANCE_METERS);
-  const corners = getFootprintCorners(lat, lon, dims.width, dims.length);
+  // Convert proposed building center to Local ENU Metric Coordinates (meters)
+  const centerENU = wgs84ToLocalENU(lat, lon);
+  const cornersENU = getMetricFootprintCorners(centerENU, dims.width, dims.length, orientation);
+  const proposedAABB = getMetricAABB(cornersENU, ROAD_CLEARANCE_METERS);
 
-  // 2. Road Network Collision (Footprint AABB pre-check + corner/center segment clearance math)
-  if (spatialData && spatialData.roads) {
-    for (const roadSeg of spatialData.roads) {
-      // Calculate road segment bounding box
-      let rMinLat = 90, rMaxLat = -90, rMinLon = 180, rMaxLon = -180;
-      for (const [rLat, rLon] of roadSeg) {
-        if (rLat < rMinLat) rMinLat = rLat;
-        if (rLat > rMaxLat) rMaxLat = rLat;
-        if (rLon < rMinLon) rMinLon = rLon;
-        if (rLon > rMaxLon) rMaxLon = rLon;
+  // 2. Road Network Collision (Two-stage Metric ENU Clearance Math)
+  const roads = spatialData?.roads || [];
+
+  for (const roadFeature of roads) {
+    const rawCoords = roadFeature.coordinates || roadFeature;
+    if (!Array.isArray(rawCoords) || rawCoords.length < 2) continue;
+
+    const hwType = roadFeature.highway || 'default';
+    const roadWidth = ROAD_WIDTH_BY_TYPE[hwType] || ROAD_WIDTH_BY_TYPE.default;
+    const clearanceThreshold = (roadWidth / 2.0) + ROAD_CLEARANCE_METERS;
+
+    // Convert road points to local ENU meters
+    const enuRoadPts = rawCoords.map((pt) => {
+      const rLat = Array.isArray(pt) ? pt[0] : pt.latitude;
+      const rLon = Array.isArray(pt) ? pt[1] : pt.longitude;
+      return wgs84ToLocalENU(rLat, rLon);
+    });
+
+    // Stage 1: Fast Metric AABB Pre-filter
+    let rMinX = Infinity, rMaxX = -Infinity, rMinY = Infinity, rMaxY = -Infinity;
+    enuRoadPts.forEach((pt) => {
+      if (pt.x < rMinX) rMinX = pt.x;
+      if (pt.x > rMaxX) rMaxX = pt.x;
+      if (pt.y < rMinY) rMinY = pt.y;
+      if (pt.y > rMaxY) rMaxY = pt.y;
+    });
+
+    const roadAABB = {
+      minX: rMinX - clearanceThreshold,
+      maxX: rMaxX + clearanceThreshold,
+      minY: rMinY - clearanceThreshold,
+      maxY: rMaxY + clearanceThreshold,
+    };
+
+    if (!metricAABBsOverlap(proposedAABB, roadAABB)) {
+      continue;
+    }
+
+    // Stage 2: Exact Metric Segment Distance Check
+    for (let i = 0; i < enuRoadPts.length - 1; i++) {
+      const a = enuRoadPts[i];
+      const b = enuRoadPts[i + 1];
+
+      // Check building center distance to segment
+      const centerDist = metricPointToSegmentDistance(centerENU.x, centerENU.y, a.x, a.y, b.x, b.y);
+      const minCenterDist = Math.min(dims.width, dims.length) / 2.0 + clearanceThreshold;
+
+      if (centerDist < minCenterDist) {
+        return {
+          valid: false,
+          reason: 'road_collision',
+          conflictType: 'road_collision',
+          coordinates: resultCoords,
+          dimensions: resultDims,
+          allowedTypes,
+        };
       }
 
-      // Fast AABB pre-check
-      if (!aabbsOverlap(proposedAABB, { minLat: rMinLat, maxLat: rMaxLat, minLon: rMinLon, maxLon: rMaxLon })) {
-        continue;
-      }
-
-      for (let i = 0; i < roadSeg.length - 1; i++) {
-        const [aLat, aLon] = roadSeg[i];
-        const [bLat, bLon] = roadSeg[i + 1];
-
-        // Check center clearance
-        const centerDist = pointToSegmentDistanceMeters(lat, lon, aLat, aLon, bLat, bLon);
-        const minCenterDist = Math.min(dims.width, dims.length) / 2.0 + ROAD_CLEARANCE_METERS;
-
-        if (centerDist < minCenterDist) {
+      // Check footprint corner distances to segment
+      for (const corner of cornersENU) {
+        const cornerDist = metricPointToSegmentDistance(corner.x, corner.y, a.x, a.y, b.x, b.y);
+        if (cornerDist < clearanceThreshold) {
           return {
             valid: false,
             reason: 'road_collision',
@@ -188,36 +274,22 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
             allowedTypes,
           };
         }
-
-        // Check corner clearances to road polyline
-        for (const corner of corners) {
-          const cornerDist = pointToSegmentDistanceMeters(corner.lat, corner.lon, aLat, aLon, bLat, bLon);
-          if (cornerDist < ROAD_CLEARANCE_METERS) {
-            return {
-              valid: false,
-              reason: 'road_collision',
-              conflictType: 'road_collision',
-              coordinates: resultCoords,
-              dimensions: resultDims,
-              allowedTypes,
-            };
-          }
-        }
       }
     }
   }
 
-  // 3. Existing Building Collision
-  const buildings = spatialData.buildings || [];
+  // 3. Existing Building Collision in Local ENU Metric Coordinates
+  const buildings = spatialData?.buildings || [];
   const footprintHalfDiag = Math.hypot(dims.width / 2, dims.length / 2);
 
   for (const bldg of buildings) {
     if (!bldg.centroid) continue;
     const [bLat, bLon] = bldg.centroid;
-    const dist = haversineDistanceMeters(lat, lon, bLat, bLon);
+    const bldgENU = wgs84ToLocalENU(bLat, bLon);
+    const distMeters = Math.hypot(centerENU.x - bldgENU.x, centerENU.y - bldgENU.y);
 
     const bldgRadius = bldg.radius || 12.0;
-    if (dist < (footprintHalfDiag + bldgRadius + BUILDING_CLEARANCE_METERS)) {
+    if (distMeters < (footprintHalfDiag + bldgRadius + BUILDING_CLEARANCE_METERS)) {
       return {
         valid: false,
         reason: 'building_collision',
@@ -229,23 +301,23 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     }
   }
 
-  // 4. Placed Proposed Developments Collision (using stored footprint dimensions)
-  const devAABB = getFootprintAABB(lat, lon, dims.width, dims.length, DEVELOPMENT_CLEARANCE_METERS);
-
+  // 4. Placed Proposed Developments Collision in Metric Coordinates
   for (const existing of existingDevs) {
     const existingLat = Number(existing.latitude);
     const existingLon = Number(existing.longitude);
     const existingModel = createDevelopmentModel(existing);
 
-    const existingAABB = getFootprintAABB(
-      existingLat,
-      existingLon,
+    const existingENU = wgs84ToLocalENU(existingLat, existingLon);
+    const existingCorners = getMetricFootprintCorners(
+      existingENU,
       existingModel.footprint.width,
       existingModel.footprint.length,
-      DEVELOPMENT_CLEARANCE_METERS
+      existingModel.orientation || 0
     );
 
-    if (aabbsOverlap(devAABB, existingAABB)) {
+    const existingAABB = getMetricAABB(existingCorners, DEVELOPMENT_CLEARANCE_METERS);
+
+    if (metricAABBsOverlap(proposedAABB, existingAABB)) {
       return {
         valid: false,
         reason: 'development_collision',
@@ -257,7 +329,7 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     }
   }
 
-  // Placement candidate valid
+  // Candidate placement location valid
   return {
     valid: true,
     reason: null,
