@@ -19,6 +19,7 @@ export function initializeApp() {
   let developmentRenderer = null;
   let placementController = null;
   let editingDevId = null;
+  let currentView = 'map';
 
   // DOM Elements
   const statusEl = document.getElementById('status-message');
@@ -37,6 +38,7 @@ export function initializeApp() {
   const dragGhost = document.getElementById('drag-ghost-preview');
   const ghostTitle = document.getElementById('ghost-title');
   const ghostSub = document.getElementById('ghost-sub');
+  const btnToggleDebug = document.getElementById('btn-toggle-debug');
 
   // Modal Elements
   const propertiesModal = document.getElementById('properties-modal');
@@ -70,6 +72,33 @@ export function initializeApp() {
     if (isComplete && statusDot) {
       statusDot.classList.remove('pulsing');
       statusDot.classList.add('success');
+    }
+  }
+
+  function switchView(viewName) {
+    currentView = viewName;
+
+    // Update active navigation tabs
+    const navTabs = document.querySelectorAll('.nav-tab');
+    navTabs.forEach((tab) => {
+      if (tab.getAttribute('data-view') === viewName) {
+        tab.classList.add('active');
+      } else {
+        tab.classList.remove('active');
+      }
+    });
+
+    // Toggle sidebar expansion based on contextual view
+    if (sidebar) {
+      if (viewName === 'map') {
+        sidebar.classList.add('collapsed');
+      } else {
+        sidebar.classList.remove('collapsed');
+      }
+    }
+
+    if (viewer) {
+      setTimeout(() => viewer.resize(), 250);
     }
   }
 
@@ -214,7 +243,7 @@ export function initializeApp() {
       btnRunSimEl: btnSidebarRunSim,
       onSelect: (dev) => {
         scenarioState.setSelectedDevForSim(dev.id);
-        if (viewer) {
+        if (viewer && typeof dev.longitude === 'number' && typeof dev.latitude === 'number' && !Number.isNaN(dev.longitude) && !Number.isNaN(dev.latitude)) {
           viewer.camera.flyTo({
             destination: Cartesian3.fromDegrees(dev.longitude, dev.latitude, 850),
             duration: 1.2,
@@ -257,6 +286,7 @@ export function initializeApp() {
       scenarioState.setSimulationResult(result);
       renderSimulationResults(compactResultContent, result);
       if (sectionResults) sectionResults.classList.remove('hidden');
+      switchView('results');
       updateStatus(`Simulation completed for ${devRecord.name}`, true);
     } catch (err) {
       updateStatus(`Simulation failed: ${err.message}`);
@@ -284,6 +314,23 @@ export function initializeApp() {
     });
 
     placementController.initScreenEvents();
+
+    // Top Navigation Tabs View Switcher
+    const navTabs = document.querySelectorAll('.nav-tab');
+    navTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const targetView = tab.getAttribute('data-view');
+        if (targetView) switchView(targetView);
+      });
+    });
+
+    if (btnToggleDebug) {
+      btnToggleDebug.addEventListener('click', () => {
+        if (debugElements.panel) {
+          debugElements.panel.classList.toggle('hidden');
+        }
+      });
+    }
 
     renderPaletteCards(devCardsContainer, (typeKey, spec, event) => {
       placementController.startPlacement(typeKey, spec, event);

@@ -4,26 +4,56 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Urban Digital Twin — Stylized 3D What-If Simulator</title>
+    <title>AI Urban Digital Twin — 3D What-If Simulator</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   </head>
   <body>
     <!-- Full-screen Cesium 3D Container -->
     <div id="cesiumContainer"></div>
 
-    <!-- Floating Top Status Header -->
-    <div id="top-status-bar" class="top-status-bar">
-      <div class="brand">
-        <span class="status-dot pulsing"></span>
-        <span class="brand-title">AI URBAN DIGITAL TWIN</span>
-        <span class="brand-divider">|</span>
-        <span id="status-message" class="status-info">Ready — Stylized Digital Twin active</span>
+    <!-- Real Top Application Navigation Bar -->
+    <header id="top-nav-bar" class="top-nav-bar glass-header">
+      <div class="nav-left">
+        <div class="nav-brand">
+          <span class="nav-brand-icon">🌆</span>
+          <span class="nav-brand-title">URBAN TWIN</span>
+          <span class="nav-brand-tag">v2.0</span>
+        </div>
+
+        <nav class="nav-tabs">
+          <button class="nav-tab active" data-view="map">
+            <span class="tab-icon">🗺️</span> Map
+          </button>
+          <button class="nav-tab" data-view="developments">
+            <span class="tab-icon">🏗️</span> Developments
+          </button>
+          <button class="nav-tab" data-view="simulation">
+            <span class="tab-icon">⚡</span> Simulation
+          </button>
+          <button class="nav-tab" data-view="results">
+            <span class="tab-icon">📊</span> Results
+          </button>
+        </nav>
       </div>
-    </div>
+
+      <div class="nav-right">
+        <div class="study-area-badge">
+          <span class="area-pin">📍</span>
+          <span class="area-name">District R3 • NAC</span>
+        </div>
+        <div class="connection-status">
+          <span class="status-dot pulsing"></span>
+          <span id="status-message" class="status-text">LIVE</span>
+        </div>
+        <button id="btn-toggle-debug" class="btn-nav-icon" title="Toggle Placement Debug Panel">
+          <span>⚙</span>
+        </button>
+      </div>
+    </header>
 
     <!-- Interactive Drag Placement Banner (Top Floating Badge) -->
     <div id="placement-banner" class="placement-banner glass-panel hidden">
@@ -69,7 +99,7 @@
       <!-- Collapsible Content Wrapper -->
       <div class="sidebar-content">
         <!-- Section 1: Overview -->
-        <div class="sidebar-section">
+        <div id="sec-overview" class="sidebar-section">
           <div class="section-header" data-target="overview-body">
             <span class="sec-icon">📍</span>
             <h4>Study Area Overview</h4>
@@ -92,7 +122,7 @@
         </div>
 
         <!-- Section 2: Add Development (Draggable Cards) -->
-        <div class="sidebar-section">
+        <div id="sec-add-dev" class="sidebar-section">
           <div class="section-header" data-target="add-dev-body">
             <span class="sec-icon">➕</span>
             <h4>Add Development</h4>
@@ -145,7 +175,7 @@
         </div>
 
         <!-- Section 3: Scenario Developments List -->
-        <div class="sidebar-section">
+        <div id="sec-dev-list" class="sidebar-section">
           <div class="section-header" data-target="dev-list-body">
             <span class="sec-icon">📋</span>
             <h4>Scenario Developments (<span id="dev-count">0</span>)</h4>
@@ -159,7 +189,7 @@
         </div>
 
         <!-- Section 4: Simulation Trigger Button -->
-        <div class="sidebar-section">
+        <div id="sec-simulation" class="sidebar-section">
           <button id="btn-sidebar-run-sim" class="btn-primary full-width-btn" disabled>
             <span>⚡</span> Run What-If Simulation
           </button>
