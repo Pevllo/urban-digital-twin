@@ -19,11 +19,13 @@ export class BuildabilityOverlay {
     if (!this.viewer || !picked) return;
 
     const spec = SUPPORTED_DEV_TYPES[devType] || SUPPORTED_DEV_TYPES.residential_compound;
-    const dims = picked.collision ? picked.collision.dimensions : spec.defaultDimensions;
-    const isValid = picked.collision ? picked.collision.valid : true;
+    const validation = picked.collision || { valid: true, reason: null };
+    const dims = validation.dimensions || spec.defaultDimensions;
+    const isValid = validation.valid;
 
-    const colorHex = isValid ? spec.color : '#ef4444';
-    const previewColor = Color.fromCssColorString(colorHex).withAlpha(isValid ? 0.85 : 0.60);
+    // Green (#10b981) when valid, Red (#ef4444) when invalid
+    const colorHex = isValid ? '#10b981' : '#ef4444';
+    const previewColor = Color.fromCssColorString(colorHex).withAlpha(isValid ? 0.85 : 0.65);
     const heightPos = Cartesian3.fromDegrees(picked.longitude, picked.latitude, dims.height / 2);
 
     const semiMajor = Math.max(dims.length, dims.width) / 2;
@@ -32,7 +34,7 @@ export class BuildabilityOverlay {
     const areaSqm = dims.length * dims.width;
     const areaHa = (areaSqm / 10000).toFixed(2);
     const areaLabel = `${areaSqm.toLocaleString()} m² (${areaHa} ha)`;
-    const statusTag = isValid ? 'VALID LOCATION' : `BLOCKED: ${picked.collision.reason}`;
+    const statusTag = isValid ? 'VALID CANDIDATE' : `BLOCKED (${validation.reason || validation.conflictType})`;
 
     const textLabel = `🏢 PROPOSED ${devType.toUpperCase()}\nStatus: ${statusTag}\nFootprint: ${dims.length}m × ${dims.width}m × ${dims.height}m (${areaLabel})\nZone ${picked.zone_id}`;
 

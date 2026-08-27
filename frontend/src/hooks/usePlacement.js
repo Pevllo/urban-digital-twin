@@ -24,9 +24,9 @@ export function createPlacementController(viewer, options = {}) {
 
     screenHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
 
-    // Left Click handler: Move confirmation, click-to-place, or entity selection
+    // Single Left Click handler: Repositioning, Click-to-place, or Entity Selection
     screenHandler.setInputAction((click) => {
-      // 1. Move location mode
+      // 1. Move/Repositioning mode confirmation
       if (movingDevId) {
         const devRecord = devStore.getDevelopment(movingDevId);
         const type = devRecord ? devRecord.development_type : 'hospital';
@@ -34,7 +34,8 @@ export function createPlacementController(viewer, options = {}) {
 
         if (picked) {
           const existingDevs = devStore.getAllDevelopments().filter(d => d.id !== movingDevId && d.development_id !== movingDevId);
-          const validation = validateBuildability(picked.latitude, picked.longitude, type, existingDevs);
+          const validation = validateBuildability(picked.latitude, picked.longitude, type, existingDevs, devRecord.properties, devRecord.height);
+
           if (validation.valid) {
             const updated = devStore.moveDevelopment(movingDevId, picked.latitude, picked.longitude, picked.zone_id);
             developmentRenderer.renderDevelopment(updated);
@@ -47,7 +48,7 @@ export function createPlacementController(viewer, options = {}) {
         return;
       }
 
-      // 2. Click placement mode
+      // 2. Click-to-place mode (when active placement initiated via palette)
       if (activePlacementType && !isDraggingFromSidebar) {
         const picked = pickGeographicLocation(viewer, click.position.x, click.position.y, buildabilityOverlay.getPreviewEntity());
         if (picked) {
@@ -68,28 +69,35 @@ export function createPlacementController(viewer, options = {}) {
             if (onOpenPropertiesModal) onOpenPropertiesModal(pendingPlacementLocation);
             activePlacementType = null;
           } else if (onStatusUpdate) {
-            onStatusUpdate(`Invalid location: ${validation.reason}`);
+            onStatusUpdate(`Invalid placement location: ${validation.reason}`);
           }
         }
         return;
       }
 
-      // 3. Entity Selection for editing/inspection
+      // 3. Persistent 3D Entity Selection
       const pickedObject = viewer.scene.pick(click.position);
-      if (pickedObject && pickedObject.id && (pickedObject.id.devId || pickedObject.id.id)) {
-        const clickedDevId = pickedObject.id.devId || pickedObject.id.id;
-        const devRecord = devStore.getDevelopment(clickedDevId);
-        if (devRecord && onOpenPropertiesModal) {
-          onOpenPropertiesModal({ ...devRecord, isNew: false });
+      if (pickedObject && pickedObject.id) {
+        const entity = pickedObject.id;
+        const devId = (entity.properties && entity.properties.developmentId ? entity.properties.developmentId.getValue() : null) || entity.devId || entity.id;
+
+        if (devId) {
+          const devRecord = devStore.getDevelopment(devId);
+          if (devRecord && onOpenPropertiesModal) {
+            onOpenPropertiesModal({ ...devRecord, isNew: false });
+          }
         }
       }
     }, ScreenSpaceEventType.LEFT_CLICK);
   }
 
   function startPlacement(typeKey, spec, event) {
+    // Teardown any lingering placement session first to enforce single session state
+    cancelPlacementMode();
+
     activePlacementType = typeKey;
     isDraggingFromSidebar = true;
-    if (onStatusUpdate) onStatusUpdate(`PLACEMENT MODE — Move over 3D map to place ${spec.label}`);
+    if (onStatusUpdate) onStatusUpdate(`PLACEMENT MODE ACTIVE — Move footprint over 3D map to place ${spec.label}`);
   }
 
   function handlePointerMove(e) {
@@ -102,14 +110,14 @@ export function createPlacementController(viewer, options = {}) {
       picked.collision = validateBuildability(picked.latitude, picked.longitude, activePlacementType, existingDevs);
       buildabilityOverlay.updatePreview(picked, activePlacementType);
 
-      // Update Debug Panel if provided
+      // Update Debug Info Panel
       if (debugElements.panel) debugElements.panel.classList.remove('hidden');
       if (debugElements.devType) debugElements.devType.textContent = activePlacementType;
       if (debugElements.devId) debugElements.devId.textContent = 'PREVIEW';
       if (debugElements.lat) debugElements.lat.textContent = `${picked.latitude.toFixed(4)}° N`;
       if (debugElements.lon) debugElements.lon.textContent = `${picked.longitude.toFixed(4)}° E`;
       if (debugElements.zone) debugElements.zone.textContent = picked.zone_id;
-      if (debugElements.status) debugElements.status.textContent = picked.collision.valid ? 'VALID CANDIDATE' : `BLOCKED (${picked.collision.conflictType})`;
+      if (debugElements.status) debugElements.status.textContent = picked.collision.valid ? 'VALID CANDIDATE' : `BLOCKED (${picked.collision.reason || picked.collision.conflictType})`;
     }
   }
 
@@ -154,11 +162,20 @@ export function createPlacementController(viewer, options = {}) {
     if (debugElements.panel) debugElements.panel.classList.add('hidden');
   }
 
+  function destroy() {
+    cancelPlacementMode();
+    if (screenHandler) {
+      screenHandler.destroy();
+      screenHandler = null;
+    }
+  }
+
   function getPendingLocation() {
     return pendingPlacementLocation;
   }
 
   function setMovingId(id) {
+    cancelPlacementMode();
     movingDevId = id;
   }
 
@@ -168,6 +185,7 @@ export function createPlacementController(viewer, options = {}) {
     handlePointerMove,
     handlePointerUp,
     cancelPlacementMode,
+    destroy,
     getPendingLocation,
     setMovingId,
   };

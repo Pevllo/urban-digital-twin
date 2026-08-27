@@ -1,5 +1,9 @@
 import { SUPPORTED_DEV_TYPES } from '../../types/development.js';
 
+/**
+ * Render Palette Cards — AI Urban Digital Twin
+ * Registers single pointerdown handler to avoid dual-firing conflicts with click events.
+ */
 export function renderPaletteCards(containerEl, onCardDragStart) {
   if (!containerEl) return;
   containerEl.innerHTML = '';
@@ -17,12 +21,19 @@ export function renderPaletteCards(containerEl, onCardDragStart) {
       </div>
     `;
 
-    const triggerStart = (e) => {
-      if (onCardDragStart) onCardDragStart(typeKey, spec, e);
-    };
+    // Single pointerdown listener to initiate placement mode cleanly
+    card.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      if (onCardDragStart) {
+        onCardDragStart(typeKey, spec, e);
+      }
+    });
 
-    card.addEventListener('pointerdown', triggerStart);
-    card.addEventListener('click', triggerStart);
+    // Prevent secondary click event from restarting placement mode
+    card.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+    });
 
     containerEl.appendChild(card);
   });

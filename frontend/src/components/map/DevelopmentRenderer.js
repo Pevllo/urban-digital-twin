@@ -58,6 +58,11 @@ export class DevelopmentRenderer {
     const entity = this.viewer.entities.add({
       position,
       devId,
+      properties: {
+        developmentId: devId,
+        developmentType: devType,
+        zoneId: zone_id,
+      },
       box: {
         dimensions: new Cartesian3(dims.length, dims.width, buildingHeight),
         material: Color.fromCssColorString(spec.color).withAlpha(0.95),

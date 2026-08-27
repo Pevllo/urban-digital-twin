@@ -8,6 +8,31 @@ import {
 import { resolveNearestZone } from './zoneResolver.js';
 
 /**
+ * Converts a Cesium Cartesian3 3D position to Geographic { longitude, latitude, height } (in degrees & meters).
+ */
+export function cartesianToLonLat(cartesian) {
+  if (!cartesian) return null;
+  const cartographic = Cartographic.fromCartesian(cartesian);
+  if (!cartographic) return null;
+
+  const lon = CesiumMath.toDegrees(cartographic.longitude);
+  const lat = CesiumMath.toDegrees(cartographic.latitude);
+  const height = cartographic.height || 0.0;
+
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
+
+  return { longitude: lon, latitude: lat, height };
+}
+
+/**
+ * Converts Geographic { longitude, latitude, height } (in degrees & meters) to a Cesium Cartesian3 3D position.
+ */
+export function lonLatToCartesian(longitude, latitude, height = 0.0) {
+  if (typeof longitude !== 'number' || typeof latitude !== 'number') return null;
+  return Cartesian3.fromDegrees(longitude, latitude, height);
+}
+
+/**
  * Haversine distance in meters between two (lat, lon) points.
  */
 export function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -45,8 +70,12 @@ export function pointToSegmentDistanceMeters(pLat, pLon, aLat, aLon, bLat, bLon)
 }
 
 /**
- * Robust Geographic 3D Picking Helper.
- * Excludes preview entities temporarily during pickPosition to prevent height snapping bugs.
+ * Geographic 3D Position Picker with safe fallback chain:
+ * 1. scene.pickPosition(windowPosition)
+ * 2. globe.pick(ray, scene)
+ * 3. pickEllipsoid(windowPosition)
+ *
+ * Temporarily hides preview entity during pickPosition to prevent self-picking height jump.
  */
 export function pickGeographicLocation(viewer, clientX, clientY, previewEntity = null) {
   if (!viewer || !viewer.scene) return null;
@@ -67,7 +96,7 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
 
   const windowPosition = new Cartesian2(clientX - rect.left, clientY - rect.top);
 
-  // Temporarily hide preview entity during pickPosition to prevent self-picking height jump
+  // Temporarily hide preview entity during pickPosition to prevent height jump
   let wasPreviewVisible = false;
   if (previewEntity) {
     wasPreviewVisible = previewEntity.show;
@@ -77,10 +106,10 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
   let cartesian = null;
 
   try {
-    // 1. Pick 3D Tileset / Building surface
+    // 1. Pick 3D Building / Tileset surface
     cartesian = viewer.scene.pickPosition(windowPosition);
 
-    // 2. Fallback: Globe raycast picking
+    // 2. Fallback: Globe terrain raycast
     if (!cartesian && viewer.scene.globe) {
       const ray = viewer.camera.getPickRay(windowPosition);
       if (ray) {
@@ -100,19 +129,15 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
 
   if (!cartesian) return null;
 
-  const cartographic = Cartographic.fromCartesian(cartesian);
-  if (!cartographic) return null;
+  const lonLat = cartesianToLonLat(cartesian);
+  if (!lonLat) return null;
 
-  const lon = CesiumMath.toDegrees(cartographic.longitude);
-  const lat = CesiumMath.toDegrees(cartographic.latitude);
-
-  if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
-
-  const resolved = resolveNearestZone(lat, lon);
+  const resolved = resolveNearestZone(lonLat.latitude, lonLat.longitude);
 
   return {
-    latitude: lat,
-    longitude: lon,
+    latitude: lonLat.latitude,
+    longitude: lonLat.longitude,
+    height: lonLat.height,
     zone_id: resolved.zone_id,
     distance_km: resolved.distance_km,
     cartesian,
