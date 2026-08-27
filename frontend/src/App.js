@@ -174,15 +174,16 @@ export function initializeApp() {
 
     allDevs.forEach((dev) => {
       const opt = document.createElement('option');
-      opt.value = dev.id || dev.development_id;
-      opt.textContent = `${dev.name || dev.id} (${dev.development_type.toUpperCase()}) — Zone ${dev.zone_id || 'Z0090'}`;
+      const dId = dev.id || dev.development_id;
+      opt.value = dId;
+      opt.textContent = `${dev.name || dId} (${dev.development_type.toUpperCase()}) — Zone ${dev.zone_id || CITY_CONFIG.referenceZoneId}`;
       if (opt.value === currentSelectedId) {
         opt.selected = true;
       }
       simDevSelect.appendChild(opt);
     });
 
-    const hasSelection = !!scenarioState.getState().selectedDevIdForSim;
+    const hasSelection = !!(simDevSelect.value || scenarioState.getState().selectedDevIdForSim);
     if (btnRunSimulation) {
       btnRunSimulation.disabled = !hasSelection || scenarioState.getState().isSimulationRunning;
     }
@@ -280,6 +281,7 @@ export function initializeApp() {
     const existingDevs = devStore.getAllDevelopments().filter(d => d.id !== targetDevId && d.development_id !== targetDevId);
     const finalModel = createDevelopmentModel({
       id: targetDevId,
+      development_id: targetDevId,
       development_type: devType,
       name: nameVal,
       latitude: targetLat,
@@ -333,7 +335,8 @@ export function initializeApp() {
       devCountEl,
       btnRunSimEl: btnRunSimulation,
       onSelect: (dev) => {
-        scenarioState.setSelectedDevForSim(dev.id);
+        const dId = dev.id || dev.development_id;
+        scenarioState.setSelectedDevForSim(dId);
         updateSimSelectDropdown();
         if (viewer && typeof dev.longitude === 'number' && typeof dev.latitude === 'number' && !Number.isNaN(dev.longitude) && !Number.isNaN(dev.latitude)) {
           viewer.camera.flyTo({
@@ -344,19 +347,22 @@ export function initializeApp() {
       },
       onEdit: (dev) => openModal({ ...dev, isNew: false }),
       onMove: (dev) => {
-        if (placementController) placementController.setMovingId(dev.id);
+        if (placementController) placementController.setMovingId(dev.id || dev.development_id);
         if (placementBanner) placementBanner.classList.remove('hidden');
-        if (bannerText) bannerText.textContent = `REPOSITIONING ${dev.id} — Click new location on 3D map`;
-        updateStatus(`Moving ${dev.id} — Click new 3D location`);
+        if (bannerText) bannerText.textContent = `REPOSITIONING ${dev.id || dev.development_id} — Click new location on 3D map`;
+        updateStatus(`Moving ${dev.id || dev.development_id} — Click new 3D location`);
       },
       onDelete: (dev) => {
-        devStore.deleteDevelopment(dev.id);
-        developmentRenderer.removeDevelopment(dev.id);
-        if (scenarioState.getState().selectedDevIdForSim === dev.id) {
+        const dId = dev.id || dev.development_id;
+        devStore.deleteDevelopment(dId);
+        developmentRenderer.removeDevelopment(dId);
+        if (scenarioState.getState().selectedDevIdForSim === dId) {
           scenarioState.setSelectedDevForSim(null);
+          scenarioState.setSimulationResult(null);
+          renderSimulationResults(compactResultContent, null);
         }
         refreshDevList();
-        updateStatus(`Deleted ${dev.id}`);
+        updateStatus(`Deleted ${dev.name || dId}`);
       },
     });
 
@@ -370,6 +376,8 @@ export function initializeApp() {
       updateStatus(`Simulation blocked: ${devRecord.name} is in an unresolved zone.`);
       return;
     }
+
+    const devId = devRecord.id || devRecord.development_id;
 
     scenarioState.setSimulationRunning(true);
     if (btnRunSimulation) btnRunSimulation.disabled = true;
@@ -385,6 +393,14 @@ export function initializeApp() {
     try {
       const selectedHour = simulationHourSelectSim ? parseInt(simulationHourSelectSim.value || '8', 10) : 8;
       const result = await runWhatIfSimulation(devRecord, selectedHour);
+      
+      // Enforce Canonical Development Identity in Result Output
+      result.development_input = {
+        ...result.development_input,
+        development_id: devId,
+        name: devRecord.name,
+      };
+
       scenarioState.setSimulationResult(result);
       renderSimulationResults(compactResultContent, result);
 
@@ -505,12 +521,27 @@ export function initializeApp() {
 
     if (simDevSelect) {
       simDevSelect.addEventListener('change', () => {
-        const devId = simDevSelect.value;
-        if (devId) {
-          scenarioState.setSelectedDevForSim(devId);
+        const selectedId = simDevSelect.value;
+        if (selectedId) {
+          scenarioState.setSelectedDevForSim(selectedId);
+          // Clear stale result from previous development
+          scenarioState.setSimulationResult(null);
+          renderSimulationResults(compactResultContent, null);
+
           if (btnRunSimulation) btnRunSimulation.disabled = false;
           if (btnSimText) btnSimText.textContent = '⚡ RUN WHAT-IF SIMULATION';
           if (simStatusBanner) simStatusBanner.classList.add('hidden');
+
+          const record = devStore.getDevelopment(selectedId);
+          if (record && viewer && typeof record.longitude === 'number' && typeof record.latitude === 'number') {
+            viewer.camera.flyTo({
+              destination: Cartesian3.fromDegrees(record.longitude, record.latitude, 850),
+              duration: 1.2,
+            });
+          }
+        } else {
+          scenarioState.setSelectedDevForSim(null);
+          if (btnRunSimulation) btnRunSimulation.disabled = true;
         }
       });
     }
@@ -567,9 +598,10 @@ export function initializeApp() {
 
     if (btnRunSimulation) {
       btnRunSimulation.addEventListener('click', () => {
-        const simDevId = scenarioState.getState().selectedDevIdForSim || (simDevSelect ? simDevSelect.value : null);
-        if (simDevId) {
-          const record = devStore.getDevelopment(simDevId);
+        const selectedId = (simDevSelect && simDevSelect.value) ? simDevSelect.value : scenarioState.getState().selectedDevIdForSim;
+        if (selectedId) {
+          scenarioState.setSelectedDevForSim(selectedId);
+          const record = devStore.getDevelopment(selectedId);
           if (record) handleTriggerSimulation(record);
         }
       });
