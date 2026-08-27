@@ -12,24 +12,30 @@ import { resolveNearestZone } from './zoneResolver.js';
  */
 export function cartesianToLonLat(cartesian) {
   if (!cartesian) return null;
-  const cartographic = Cartographic.fromCartesian(cartesian);
+  let cartographic = null;
+  try {
+    cartographic = Cartographic.fromCartesian(cartesian);
+  } catch (e) {
+    return null;
+  }
   if (!cartographic) return null;
 
   const lon = CesiumMath.toDegrees(cartographic.longitude);
   const lat = CesiumMath.toDegrees(cartographic.latitude);
-  const height = cartographic.height || 0.0;
+  const h = (typeof cartographic.height === 'number' && !Number.isNaN(cartographic.height)) ? cartographic.height : 0.0;
 
   if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
 
-  return { longitude: lon, latitude: lat, height };
+  return { longitude: lon, latitude: lat, terrainHeight: h, height: h };
 }
 
 /**
  * Converts Geographic { longitude, latitude, height } (in degrees & meters) to a Cesium Cartesian3 3D position.
  */
 export function lonLatToCartesian(longitude, latitude, height = 0.0) {
-  if (typeof longitude !== 'number' || typeof latitude !== 'number') return null;
-  return Cartesian3.fromDegrees(longitude, latitude, height);
+  if (typeof longitude !== 'number' || typeof latitude !== 'number' || Number.isNaN(longitude) || Number.isNaN(latitude)) return null;
+  const h = (typeof height === 'number' && !Number.isNaN(height)) ? height : 0.0;
+  return Cartesian3.fromDegrees(longitude, latitude, h);
 }
 
 /**

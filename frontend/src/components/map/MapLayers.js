@@ -34,8 +34,12 @@ export async function loadMapLayers(viewer) {
     spatialData.roads.forEach((roadSeg, idx) => {
       const flatPositions = [];
       roadSeg.forEach(([rLat, rLon]) => {
-        flatPositions.push(rLon, rLat);
+        if (typeof rLat === 'number' && typeof rLon === 'number' && !Number.isNaN(rLat) && !Number.isNaN(rLon)) {
+          flatPositions.push(rLon, rLat);
+        }
       });
+
+      if (flatPositions.length < 4) return;
 
       const isMajor = idx % 5 === 0;
       viewer.entities.add({

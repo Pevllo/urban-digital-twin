@@ -96,7 +96,7 @@ export function aabbsOverlap(boxA, boxB) {
  *   reason: string | null,
  *   conflictType: "none" | "invalid_coordinates" | "outside_city_bounds" | "road_collision" | "building_collision" | "development_collision",
  *   coordinates: { longitude, latitude, terrainHeight },
- *   dimensions: { width, length, buildingHeight },
+ *   dimensions: { width, length, height, buildingHeight },
  *   allowedTypes: string[]
  * }
  */
@@ -107,7 +107,7 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
       reason: 'invalid_coordinates',
       conflictType: 'invalid_coordinates',
       coordinates: { longitude: lon || 0, latitude: lat || 0, terrainHeight: 0 },
-      dimensions: { width: 50, length: 50, buildingHeight: 15 },
+      dimensions: { width: 50, length: 50, height: 15, buildingHeight: 15 },
       allowedTypes: Object.keys(SUPPORTED_DEV_TYPES),
     };
   }
@@ -121,9 +121,9 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
   });
 
   const dims = model.footprint;
-  const bldgHeight = model.buildingHeight || model.height;
+  const bldgHeight = model.buildingHeight || model.height || 15;
   const resultCoords = { longitude: lon, latitude: lat, terrainHeight: model.z || 0.0 };
-  const resultDims = { width: dims.width, length: dims.length, buildingHeight: bldgHeight };
+  const resultDims = { width: dims.width, length: dims.length, height: bldgHeight, buildingHeight: bldgHeight };
   const allowedTypes = Object.keys(SUPPORTED_DEV_TYPES);
 
   // 1. Dynamic City Extent Check

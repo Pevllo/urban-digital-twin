@@ -18,31 +18,41 @@ export class BuildabilityOverlay {
   updatePreview(picked, devType) {
     if (!this.viewer || !picked) return;
 
+    const lon = (typeof picked.longitude === 'number' && !Number.isNaN(picked.longitude)) ? picked.longitude : null;
+    const lat = (typeof picked.latitude === 'number' && !Number.isNaN(picked.latitude)) ? picked.latitude : null;
+
+    if (lon === null || lat === null) return;
+
     const spec = SUPPORTED_DEV_TYPES[devType] || SUPPORTED_DEV_TYPES.residential_compound;
     const validation = picked.collision || { valid: true, reason: null };
     const dims = validation.dimensions || spec.defaultDimensions;
-    const isValid = validation.valid;
 
-    // Green (#10b981) when valid, Red (#ef4444) when invalid
+    const width = (typeof dims.width === 'number' && !Number.isNaN(dims.width) && dims.width > 0) ? dims.width : spec.defaultDimensions.width;
+    const length = (typeof dims.length === 'number' && !Number.isNaN(dims.length) && dims.length > 0) ? dims.length : spec.defaultDimensions.length;
+
+    const rawHeight = dims.height || dims.buildingHeight;
+    const height = (typeof rawHeight === 'number' && !Number.isNaN(rawHeight) && rawHeight > 0) ? rawHeight : spec.defaultDimensions.height;
+
+    const isValid = validation.valid;
     const colorHex = isValid ? '#10b981' : '#ef4444';
     const previewColor = Color.fromCssColorString(colorHex).withAlpha(isValid ? 0.85 : 0.65);
-    const heightPos = Cartesian3.fromDegrees(picked.longitude, picked.latitude, dims.height / 2);
+    const heightPos = Cartesian3.fromDegrees(lon, lat, height / 2);
 
-    const semiMajor = Math.max(dims.length, dims.width) / 2;
-    const semiMinor = Math.min(dims.length, dims.width) / 2;
+    const semiMajor = Math.max(length, width) / 2;
+    const semiMinor = Math.min(length, width) / 2;
 
-    const areaSqm = dims.length * dims.width;
+    const areaSqm = length * width;
     const areaHa = (areaSqm / 10000).toFixed(2);
     const areaLabel = `${areaSqm.toLocaleString()} m² (${areaHa} ha)`;
     const statusTag = isValid ? 'VALID CANDIDATE' : `BLOCKED (${validation.reason || validation.conflictType})`;
 
-    const textLabel = `🏢 PROPOSED ${devType.toUpperCase()}\nStatus: ${statusTag}\nFootprint: ${dims.length}m × ${dims.width}m × ${dims.height}m (${areaLabel})\nZone ${picked.zone_id}`;
+    const textLabel = `🏢 PROPOSED ${devType.toUpperCase()}\nStatus: ${statusTag}\nFootprint: ${length}m × ${width}m × ${height}m (${areaLabel})\nZone ${picked.zone_id || 'unresolved'}`;
 
     if (!this.previewEntity) {
       this.previewEntity = this.viewer.entities.add({
         position: heightPos,
         box: {
-          dimensions: new Cartesian3(dims.length, dims.width, dims.height),
+          dimensions: new Cartesian3(length, width, height),
           material: previewColor,
           outline: true,
           outlineColor: isValid ? Color.WHITE : Color.RED,
@@ -71,7 +81,7 @@ export class BuildabilityOverlay {
     } else {
       this.previewEntity.position = heightPos;
       if (this.previewEntity.box) {
-        this.previewEntity.box.dimensions = new Cartesian3(dims.length, dims.width, dims.height);
+        this.previewEntity.box.dimensions = new Cartesian3(length, width, height);
         this.previewEntity.box.material = previewColor;
         this.previewEntity.box.outlineColor = isValid ? Color.WHITE : Color.RED;
       }

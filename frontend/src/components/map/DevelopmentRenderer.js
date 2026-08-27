@@ -18,31 +18,40 @@ export class DevelopmentRenderer {
   }
 
   renderDevelopment(devRecord) {
-    if (!this.viewer) return null;
+    if (!this.viewer || !devRecord) return null;
 
-    const { id, development_id, type, development_type, latitude, longitude, zone_id, name, footprint, height, floors } = devRecord;
+    const { id, development_id, type, development_type, latitude, longitude, zone_id, name, footprint, height, buildingHeight, floors } = devRecord;
     const devId = id || development_id;
     const devType = type || development_type;
     const spec = SUPPORTED_DEV_TYPES[devType] || SUPPORTED_DEV_TYPES.residential_compound;
 
+    const lon = (typeof longitude === 'number' && !Number.isNaN(longitude)) ? longitude : null;
+    const lat = (typeof latitude === 'number' && !Number.isNaN(latitude)) ? latitude : null;
+
+    if (lon === null || lat === null) return null;
+
     const dims = footprint || spec.defaultDimensions;
-    const buildingHeight = height || dims.height;
+    const width = (typeof dims.width === 'number' && !Number.isNaN(dims.width) && dims.width > 0) ? dims.width : spec.defaultDimensions.width;
+    const length = (typeof dims.length === 'number' && !Number.isNaN(dims.length) && dims.length > 0) ? dims.length : spec.defaultDimensions.length;
 
-    const position = Cartesian3.fromDegrees(longitude, latitude, buildingHeight / 2);
-    const semiMajor = Math.max(dims.length, dims.width) / 2;
-    const semiMinor = Math.min(dims.length, dims.width) / 2;
+    const rawHeight = height || buildingHeight || dims.height;
+    const bldgHeight = (typeof rawHeight === 'number' && !Number.isNaN(rawHeight) && rawHeight > 0) ? rawHeight : spec.defaultDimensions.height;
 
-    const areaSqm = dims.length * dims.width;
+    const position = Cartesian3.fromDegrees(lon, lat, bldgHeight / 2);
+    const semiMajor = Math.max(length, width) / 2;
+    const semiMinor = Math.min(length, width) / 2;
+
+    const areaSqm = length * width;
     const areaHa = (areaSqm / 10000).toFixed(2);
     const areaLabel = `${areaSqm.toLocaleString()} m² (${areaHa} ha)`;
 
-    const labelText = `🏢 PROPOSED ${devType.toUpperCase()}\n${name || devId}\nFootprint: ${dims.length}m × ${dims.width}m × ${buildingHeight}m (${floors || Math.round(buildingHeight / 3)} fl | ${areaLabel})\nZone ${zone_id}`;
+    const labelText = `🏢 PROPOSED ${devType.toUpperCase()}\n${name || devId}\nFootprint: ${length}m × ${width}m × ${bldgHeight}m (${floors || Math.round(bldgHeight / 3)} fl | ${areaLabel})\nZone ${zone_id || 'unresolved'}`;
 
     if (this.entitiesMap.has(devId)) {
       const entity = this.entitiesMap.get(devId);
       entity.position = position;
       if (entity.box) {
-        entity.box.dimensions = new Cartesian3(dims.length, dims.width, buildingHeight);
+        entity.box.dimensions = new Cartesian3(length, width, bldgHeight);
       }
       if (entity.ellipse) {
         entity.ellipse.semiMajorAxis = semiMajor;
@@ -64,7 +73,7 @@ export class DevelopmentRenderer {
         zoneId: zone_id,
       },
       box: {
-        dimensions: new Cartesian3(dims.length, dims.width, buildingHeight),
+        dimensions: new Cartesian3(length, width, bldgHeight),
         material: Color.fromCssColorString(spec.color).withAlpha(0.95),
         outline: true,
         outlineColor: Color.WHITE,
