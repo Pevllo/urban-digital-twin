@@ -68,6 +68,15 @@ export function resolveNearestZone(latitude, longitude, zones = ZONE_DATASETS) {
     }
   }
 
+  if (!nearestZone || minDistanceKm > 25.0) {
+    return {
+      zone_id: 'unresolved',
+      distance_km: Math.round(minDistanceKm * 1000.0) / 1000.0,
+      centroid_lat: null,
+      centroid_lon: null,
+    };
+  }
+
   return {
     zone_id: nearestZone.zone_id,
     distance_km: Math.round(minDistanceKm * 1000.0) / 1000.0,

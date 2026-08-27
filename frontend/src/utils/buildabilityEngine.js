@@ -4,17 +4,16 @@ import { createDevelopmentModel, SUPPORTED_DEV_TYPES } from '../types/developmen
 
 // Configurable Real-World Setback Clearance (in Meters)
 export const ROAD_CLEARANCE_METERS = 5.0;
-export const BUILDING_CLEARANCE_METERS = 6.0;
+export const BUILDING_CLEARANCE_METERS = 5.0;
 export const DEVELOPMENT_CLEARANCE_METERS = 5.0;
 
 /**
- * Computes dynamic geographic bounding box extent from currently loaded spatial features.
- * Adapts automatically if city dataset changes.
+ * Computes dynamic geographic bounding box extent from currently loaded spatial dataset.
+ * Returns null if dataset has no spatial geometry.
  */
 export function getCityExtent(spatialDataset = spatialData) {
-  if (!spatialDataset || !spatialDataset.roads || spatialDataset.roads.length === 0) {
-    // Fallback bounds
-    return { minLat: 29.80, maxLat: 30.20, minLon: 31.50, maxLon: 31.95 };
+  if (!spatialDataset || !spatialDataset.roads || !Array.isArray(spatialDataset.roads) || spatialDataset.roads.length === 0) {
+    return null;
   }
 
   let minLat = 90.0;
@@ -31,7 +30,7 @@ export function getCityExtent(spatialDataset = spatialData) {
     }
   }
 
-  // Add 500m (~0.0045 degree) boundary buffer around study area
+  // 500m (~0.0045 deg) study area buffer around spatial network
   const buf = 0.0045;
   return {
     minLat: minLat - buf,
@@ -58,41 +57,88 @@ export function getFootprintCorners(lat, lon, widthMeters, lengthMeters) {
 }
 
 /**
- * Validates development placement against city boundaries, road network, building footprints,
- * and existing placed developments using exact footprint geometry.
+ * Calculates axis-aligned bounding box (AABB) in degrees for a development footprint.
+ */
+export function getFootprintAABB(lat, lon, widthMeters, lengthMeters, clearanceMeters = 0.0) {
+  const totalLength = lengthMeters + clearanceMeters * 2.0;
+  const totalWidth = widthMeters + clearanceMeters * 2.0;
+
+  const latOffset = (totalLength / 2.0) / 111000.0;
+  const lonOffset = (totalWidth / 2.0) / (111000.0 * Math.cos((lat * Math.PI) / 180.0));
+
+  return {
+    minLat: lat - latOffset,
+    maxLat: lat + latOffset,
+    minLon: lon - lonOffset,
+    maxLon: lon + lonOffset,
+  };
+}
+
+/**
+ * Tests whether two footprint AABBs overlap.
+ */
+export function aabbsOverlap(boxA, boxB) {
+  return !(
+    boxA.maxLat < boxB.minLat ||
+    boxA.minLat > boxB.maxLat ||
+    boxA.maxLon < boxB.minLon ||
+    boxA.minLon > boxB.maxLon
+  );
+}
+
+/**
+ * Validates development placement against dynamic city boundaries, road network,
+ * existing building footprints, and placed developments using footprint geometry.
  *
  * Returns uniform validation structure:
  * {
  *   valid: boolean,
  *   reason: string | null,
  *   conflictType: "none" | "invalid_coordinates" | "outside_city_bounds" | "road_collision" | "building_collision" | "development_collision",
- *   coordinates: { longitude, latitude, height },
- *   dimensions: { width, length, height },
+ *   coordinates: { longitude, latitude, terrainHeight },
+ *   dimensions: { width, length, buildingHeight },
  *   allowedTypes: string[]
  * }
  */
-export function validateBuildability(lat, lon, devType, existingDevs = [], properties = {}, height = 0) {
+export function validateBuildability(lat, lon, devType, existingDevs = [], properties = {}, buildingHeightOverride = 0) {
   if (typeof lat !== 'number' || typeof lon !== 'number' || Number.isNaN(lat) || Number.isNaN(lon)) {
     return {
       valid: false,
       reason: 'invalid_coordinates',
       conflictType: 'invalid_coordinates',
-      coordinates: { longitude: lon || 0, latitude: lat || 0, height },
-      dimensions: { width: 50, length: 50, height: 15 },
+      coordinates: { longitude: lon || 0, latitude: lat || 0, terrainHeight: 0 },
+      dimensions: { width: 50, length: 50, buildingHeight: 15 },
       allowedTypes: Object.keys(SUPPORTED_DEV_TYPES),
     };
   }
 
-  const model = createDevelopmentModel({ development_type: devType, latitude: lat, longitude: lon, properties, height });
-  const dims = model.footprint;
-  const devHeight = model.height;
+  const model = createDevelopmentModel({
+    development_type: devType,
+    latitude: lat,
+    longitude: lon,
+    properties,
+    height: buildingHeightOverride,
+  });
 
-  const resultCoords = { longitude: lon, latitude: lat, height: devHeight };
-  const resultDims = { width: dims.width, length: dims.length, height: devHeight };
+  const dims = model.footprint;
+  const bldgHeight = model.buildingHeight || model.height;
+  const resultCoords = { longitude: lon, latitude: lat, terrainHeight: model.z || 0.0 };
+  const resultDims = { width: dims.width, length: dims.length, buildingHeight: bldgHeight };
   const allowedTypes = Object.keys(SUPPORTED_DEV_TYPES);
 
   // 1. Dynamic City Extent Check
   const cityExtent = getCityExtent(spatialData);
+  if (!cityExtent) {
+    return {
+      valid: false,
+      reason: 'outside_city_bounds',
+      conflictType: 'outside_city_bounds',
+      coordinates: resultCoords,
+      dimensions: resultDims,
+      allowedTypes,
+    };
+  }
+
   if (lat < cityExtent.minLat || lat > cityExtent.maxLat || lon < cityExtent.minLon || lon > cityExtent.maxLon) {
     return {
       valid: false,
@@ -104,21 +150,35 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     };
   }
 
-  // Calculate 4 corners of proposed development footprint box
+  const proposedAABB = getFootprintAABB(lat, lon, dims.width, dims.length, ROAD_CLEARANCE_METERS);
   const corners = getFootprintCorners(lat, lon, dims.width, dims.length);
 
-  // 2. Road Network Collision (test footprint box corners & center against road segment clearance)
+  // 2. Road Network Collision (Footprint AABB pre-check + corner/center segment clearance math)
   if (spatialData && spatialData.roads) {
     for (const roadSeg of spatialData.roads) {
+      // Calculate road segment bounding box
+      let rMinLat = 90, rMaxLat = -90, rMinLon = 180, rMaxLon = -180;
+      for (const [rLat, rLon] of roadSeg) {
+        if (rLat < rMinLat) rMinLat = rLat;
+        if (rLat > rMaxLat) rMaxLat = rLat;
+        if (rLon < rMinLon) rMinLon = rLon;
+        if (rLon > rMaxLon) rMaxLon = rLon;
+      }
+
+      // Fast AABB pre-check
+      if (!aabbsOverlap(proposedAABB, { minLat: rMinLat, maxLat: rMaxLat, minLon: rMinLon, maxLon: rMaxLon })) {
+        continue;
+      }
+
       for (let i = 0; i < roadSeg.length - 1; i++) {
         const [aLat, aLon] = roadSeg[i];
         const [bLat, bLon] = roadSeg[i + 1];
 
-        // Check center distance
+        // Check center clearance
         const centerDist = pointToSegmentDistanceMeters(lat, lon, aLat, aLon, bLat, bLon);
-        const centerThreshold = Math.min(dims.width, dims.length) / 2.0 + ROAD_CLEARANCE_METERS;
+        const minCenterDist = Math.min(dims.width, dims.length) / 2.0 + ROAD_CLEARANCE_METERS;
 
-        if (centerDist < centerThreshold) {
+        if (centerDist < minCenterDist) {
           return {
             valid: false,
             reason: 'road_collision',
@@ -129,7 +189,7 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
           };
         }
 
-        // Check each footprint corner distance to road line segment
+        // Check corner clearances to road polyline
         for (const corner of corners) {
           const cornerDist = pointToSegmentDistanceMeters(corner.lat, corner.lon, aLat, aLon, bLat, bLon);
           if (cornerDist < ROAD_CLEARANCE_METERS) {
@@ -147,7 +207,7 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     }
   }
 
-  // 3. Existing Building Footprint Collision
+  // 3. Existing Building Collision
   const buildings = spatialData.buildings || [];
   const footprintHalfDiag = Math.hypot(dims.width / 2, dims.length / 2);
 
@@ -156,7 +216,6 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     const [bLat, bLon] = bldg.centroid;
     const dist = haversineDistanceMeters(lat, lon, bLat, bLon);
 
-    // If building size is known, use its radius; otherwise use default 12m
     const bldgRadius = bldg.radius || 12.0;
     if (dist < (footprintHalfDiag + bldgRadius + BUILDING_CLEARANCE_METERS)) {
       return {
@@ -170,16 +229,23 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     }
   }
 
-  // 4. Other Placed Proposed Developments Collision (using stored footprint dimensions)
+  // 4. Placed Proposed Developments Collision (using stored footprint dimensions)
+  const devAABB = getFootprintAABB(lat, lon, dims.width, dims.length, DEVELOPMENT_CLEARANCE_METERS);
+
   for (const existing of existingDevs) {
     const existingLat = Number(existing.latitude);
     const existingLon = Number(existing.longitude);
-    const dist = haversineDistanceMeters(lat, lon, existingLat, existingLon);
-
     const existingModel = createDevelopmentModel(existing);
-    const existingHalfDiag = Math.hypot(existingModel.footprint.width / 2, existingModel.footprint.length / 2);
 
-    if (dist < (footprintHalfDiag + existingHalfDiag + DEVELOPMENT_CLEARANCE_METERS)) {
+    const existingAABB = getFootprintAABB(
+      existingLat,
+      existingLon,
+      existingModel.footprint.width,
+      existingModel.footprint.length,
+      DEVELOPMENT_CLEARANCE_METERS
+    );
+
+    if (aabbsOverlap(devAABB, existingAABB)) {
       return {
         valid: false,
         reason: 'development_collision',
@@ -191,7 +257,7 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     }
   }
 
-  // Candidate location valid
+  // Placement candidate valid
   return {
     valid: true,
     reason: null,

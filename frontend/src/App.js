@@ -1,3 +1,4 @@
+import { Cartesian3 } from 'cesium';
 import { createCesiumViewer } from './components/map/MapContainer.js';
 import { BuildabilityOverlay } from './components/map/BuildabilityOverlay.js';
 import { DevelopmentRenderer } from './components/map/DevelopmentRenderer.js';
@@ -8,6 +9,8 @@ import { renderDevelopmentList } from './components/development/DevelopmentList.
 import { renderSimulationResults } from './components/simulation/SimulationResults.js';
 import { createPlacementController } from './hooks/usePlacement.js';
 import { runWhatIfSimulation } from './services/api/simulationApi.js';
+import { validateBuildability } from './utils/buildabilityEngine.js';
+import { createDevelopmentModel } from './types/development.js';
 
 export function initializeApp() {
   const devStore = new DevelopmentStore();
@@ -77,7 +80,7 @@ export function initializeApp() {
 
     modalTitle.textContent = isNew ? `Configure ${config.label}` : `Edit ${devRecord.name}`;
     modalDevId.textContent = devRecord.id || devRecord.development_id;
-    modalDevZone.textContent = `Zone: ${devRecord.zone_id}`;
+    modalDevZone.textContent = `Zone: ${devRecord.zone_id || 'unresolved'}`;
     modalDevCoords.textContent = `${devRecord.latitude.toFixed(4)}° N, ${devRecord.longitude.toFixed(4)}° E`;
 
     devNameInput.value = devRecord.name || `${config.label} ${devRecord.id || devRecord.development_id}`;
@@ -128,12 +131,17 @@ export function initializeApp() {
       return;
     }
 
-    const devType = pending ? pending.development_type : (devStore.getDevelopment(editingDevId)?.development_type || 'hospital');
+    const targetDevId = pending ? (pending.id || pending.development_id) : editingDevId;
+    const existingRecord = editingDevId ? devStore.getDevelopment(editingDevId) : null;
+    const devType = pending ? pending.development_type : (existingRecord?.development_type || 'hospital');
+    const targetLat = pending ? pending.latitude : existingRecord.latitude;
+    const targetLon = pending ? pending.longitude : existingRecord.longitude;
+    const targetZoneId = pending ? pending.zone_id : existingRecord.zone_id;
     const config = SUPPORTED_DEV_TYPES[devType];
 
     let nameVal = devNameInput.value ? devNameInput.value.trim() : '';
     if (!nameVal) {
-      nameVal = pending ? `${config.label} ${pending.development_id}` : `Proposed ${config.label}`;
+      nameVal = pending ? `${config.label} ${targetDevId}` : `Proposed ${config.label}`;
     }
 
     const simHour = parseInt(simulationHourSelect.value || '8', 10);
@@ -146,40 +154,53 @@ export function initializeApp() {
       properties[key] = Number.isNaN(numVal) ? (config.propertyFields.find(f => f.key === key)?.default || 0) : numVal;
     });
 
-    const validation = devStore.validateProperties(devType, properties);
-    if (!validation.valid) {
-      formErrorAlert.textContent = validation.error;
+    const propValidation = devStore.validateProperties(devType, properties);
+    if (!propValidation.valid) {
+      formErrorAlert.textContent = propValidation.error;
+      formErrorAlert.classList.remove('hidden');
+      return;
+    }
+
+    // Perform final buildability re-validation using the FINAL properties and dimensions
+    const existingDevs = devStore.getAllDevelopments().filter(d => d.id !== targetDevId && d.development_id !== targetDevId);
+    const finalModel = createDevelopmentModel({
+      id: targetDevId,
+      development_type: devType,
+      name: nameVal,
+      latitude: targetLat,
+      longitude: targetLon,
+      zone_id: targetZoneId,
+      properties,
+      simulation_hour: simHour,
+    });
+
+    const finalBuildability = validateBuildability(
+      finalModel.latitude,
+      finalModel.longitude,
+      devType,
+      existingDevs,
+      properties,
+      finalModel.buildingHeight
+    );
+
+    if (!finalBuildability.valid) {
+      formErrorAlert.textContent = `Cannot confirm placement: Building footprint overlaps an existing ${finalBuildability.reason || finalBuildability.conflictType}.`;
       formErrorAlert.classList.remove('hidden');
       return;
     }
 
     let record;
     if (pending && pending.isNew) {
-      record = devStore.addDevelopment({
-        id: pending.id || pending.development_id,
-        development_id: pending.id || pending.development_id,
-        development_type: devType,
-        name: nameVal,
-        latitude: pending.latitude,
-        longitude: pending.longitude,
-        zone_id: pending.zone_id,
-        properties,
-        simulation_hour: simHour,
-      });
+      record = devStore.addDevelopment(finalModel);
     } else if (editingDevId) {
-      record = devStore.updateDevelopment(editingDevId, {
-        development_type: devType,
-        name: nameVal,
-        properties,
-        simulation_hour: simHour,
-      });
+      record = devStore.updateDevelopment(editingDevId, finalModel);
     }
 
     if (record) {
       developmentRenderer.renderDevelopment(record);
       scenarioState.setSelectedDevForSim(record.id);
       refreshDevList();
-      updateStatus(`Confirmed ${record.name} in Zone ${record.zone_id}`, true);
+      updateStatus(`Confirmed ${record.name} in Zone ${record.zone_id || 'unresolved'}`, true);
     }
 
     propertiesModal.classList.add('hidden');
@@ -221,6 +242,12 @@ export function initializeApp() {
 
   async function handleTriggerSimulation(devRecord) {
     if (scenarioState.getState().isSimulationRunning) return;
+
+    if (!devRecord.zone_id || devRecord.zone_id === 'unresolved') {
+      updateStatus(`Simulation blocked: ${devRecord.name} is in an unresolved zone.`);
+      return;
+    }
+
     scenarioState.setSimulationRunning(true);
     updateStatus(`Running What-If simulation for ${devRecord.name}...`);
     btnSidebarRunSim.disabled = true;

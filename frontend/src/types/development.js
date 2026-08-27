@@ -162,7 +162,7 @@ export function createDevelopmentModel(raw) {
     parking: Math.round(area / 100),
     trafficGeneration: 0,
     status: raw.status || 'proposed',
-    zone_id: raw.zone_id || 'Z0090',
+    zone_id: raw.zone_id || 'unresolved',
     properties: { ...props },
     simulation_hour: Number(raw.simulation_hour || 8),
     created_at: raw.created_at || new Date().toISOString(),

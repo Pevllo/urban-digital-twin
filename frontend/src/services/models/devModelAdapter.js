@@ -12,8 +12,8 @@ export function adaptDevelopmentToPayload(devRecord, simulationHour = 8) {
   const devId = id || development_id;
   const devType = type || development_type;
 
-  if (!devType || !zone_id) {
-    throw new Error('Development scenario is missing required fields (type or zone_id).');
+  if (!devType || !zone_id || zone_id === 'unresolved') {
+    throw new Error(`Development scenario '${devId || devType}' is in an unresolved geographic zone. Position building within mapped study zone before running simulation.`);
   }
 
   return {
