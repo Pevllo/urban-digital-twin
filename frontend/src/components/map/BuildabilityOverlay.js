@@ -38,9 +38,6 @@ export class BuildabilityOverlay {
     const previewColor = Color.fromCssColorString(colorHex).withAlpha(isValid ? 0.85 : 0.65);
     const heightPos = Cartesian3.fromDegrees(lon, lat, height / 2);
 
-    const semiMajor = Math.max(length, width) / 2;
-    const semiMinor = Math.min(length, width) / 2;
-
     const areaSqm = length * width;
     const areaHa = (areaSqm / 10000).toFixed(2);
     const areaLabel = `${areaSqm.toLocaleString()} m² (${areaHa} ha)`;
@@ -55,16 +52,8 @@ export class BuildabilityOverlay {
           dimensions: new Cartesian3(length, width, height),
           material: previewColor,
           outline: true,
-          outlineColor: isValid ? Color.WHITE : Color.RED,
+          outlineColor: isValid ? Color.WHITE : Color.fromCssColorString('#991b1b'),
           heightReference: HeightReference.RELATIVE_TO_GROUND,
-        },
-        ellipse: {
-          semiMajorAxis: semiMajor,
-          semiMinorAxis: semiMinor,
-          material: Color.fromCssColorString(colorHex).withAlpha(0.35),
-          outline: true,
-          outlineColor: isValid ? Color.WHITE : Color.RED,
-          heightReference: HeightReference.CLAMP_TO_GROUND,
         },
         label: {
           text: textLabel,
@@ -83,13 +72,7 @@ export class BuildabilityOverlay {
       if (this.previewEntity.box) {
         this.previewEntity.box.dimensions = new Cartesian3(length, width, height);
         this.previewEntity.box.material = previewColor;
-        this.previewEntity.box.outlineColor = isValid ? Color.WHITE : Color.RED;
-      }
-      if (this.previewEntity.ellipse) {
-        this.previewEntity.ellipse.semiMajorAxis = semiMajor;
-        this.previewEntity.ellipse.semiMinorAxis = semiMinor;
-        this.previewEntity.ellipse.material = Color.fromCssColorString(colorHex).withAlpha(0.35);
-        this.previewEntity.ellipse.outlineColor = isValid ? Color.WHITE : Color.RED;
+        this.previewEntity.box.outlineColor = isValid ? Color.WHITE : Color.fromCssColorString('#991b1b');
       }
       if (this.previewEntity.label) {
         this.previewEntity.label.text = textLabel;

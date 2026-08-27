@@ -38,8 +38,6 @@ export class DevelopmentRenderer {
     const bldgHeight = (typeof rawHeight === 'number' && !Number.isNaN(rawHeight) && rawHeight > 0) ? rawHeight : spec.defaultDimensions.height;
 
     const position = Cartesian3.fromDegrees(lon, lat, bldgHeight / 2);
-    const semiMajor = Math.max(length, width) / 2;
-    const semiMinor = Math.min(length, width) / 2;
 
     const areaSqm = length * width;
     const areaHa = (areaSqm / 10000).toFixed(2);
@@ -52,10 +50,6 @@ export class DevelopmentRenderer {
       entity.position = position;
       if (entity.box) {
         entity.box.dimensions = new Cartesian3(length, width, bldgHeight);
-      }
-      if (entity.ellipse) {
-        entity.ellipse.semiMajorAxis = semiMajor;
-        entity.ellipse.semiMinorAxis = semiMinor;
       }
       if (entity.label) {
         entity.label.text = labelText;
@@ -78,21 +72,6 @@ export class DevelopmentRenderer {
         outline: true,
         outlineColor: Color.WHITE,
         heightReference: HeightReference.RELATIVE_TO_GROUND,
-      },
-      ellipse: {
-        semiMajorAxis: semiMajor,
-        semiMinorAxis: semiMinor,
-        material: Color.fromCssColorString(spec.color).withAlpha(0.45),
-        outline: true,
-        outlineColor: Color.WHITE,
-        heightReference: HeightReference.CLAMP_TO_GROUND,
-      },
-      point: {
-        pixelSize: 10,
-        color: Color.fromCssColorString(spec.color),
-        outlineColor: Color.WHITE,
-        outlineWidth: 2,
-        heightReference: HeightReference.CLAMP_TO_GROUND,
       },
       label: {
         text: labelText,
