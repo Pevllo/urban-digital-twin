@@ -55,20 +55,37 @@ export async function loadMapLayers(viewer) {
       const hwType = roadFeature.highway || 'default';
       const baseWidth = ROAD_WIDTH_BY_TYPE[hwType] || 5.0;
 
-      const isMajor = ['motorway', 'trunk', 'primary', 'secondary'].includes(hwType);
-      const isMedium = ['tertiary', 'unclassified'].includes(hwType);
+      // Road Visual Hierarchy for maximum contrast against satellite imagery
+      let renderWidth = 2.0;
+      let renderColor = '#64748b';
+      let isGlow = false;
 
-      const renderWidth = isMajor ? Math.min(6, Math.max(4, baseWidth * 0.5)) : (isMedium ? 3.0 : 1.8);
-      const renderColor = isMajor ? '#38bdf8' : (isMedium ? '#60a5fa' : '#475569');
+      if (['motorway', 'motorway_link', 'trunk', 'trunk_link'].includes(hwType)) {
+        renderWidth = 6.0;
+        renderColor = '#38bdf8';
+        isGlow = true;
+      } else if (['primary', 'primary_link', 'secondary', 'secondary_link'].includes(hwType)) {
+        renderWidth = 4.5;
+        renderColor = '#60a5fa';
+      } else if (['tertiary', 'tertiary_link'].includes(hwType)) {
+        renderWidth = 3.5;
+        renderColor = '#818cf8';
+      } else if (['residential', 'unclassified'].includes(hwType)) {
+        renderWidth = 2.5;
+        renderColor = '#a5b4fc';
+      } else { // service, living_street, construction, etc.
+        renderWidth = 1.8;
+        renderColor = '#64748b';
+      }
 
       viewer.entities.add({
         polyline: {
           positions: Cartesian3.fromDegreesArray(flatPositions),
           width: renderWidth,
-          material: isMajor
+          material: isGlow
             ? new PolylineGlowMaterialProperty({
-                glowPower: 0.2,
-                color: Color.fromCssColorString('#38bdf8'),
+                glowPower: 0.25,
+                color: Color.fromCssColorString(renderColor),
               })
             : Color.fromCssColorString(renderColor),
           clampToGround: true,
