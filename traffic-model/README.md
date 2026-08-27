@@ -1,4 +1,4 @@
-﻿# Traffic Model — AI Urban Digital Twin
+# Traffic Model — AI Urban Digital Twin
 
 The **Traffic Model** component predicts hourly vehicle traffic volumes across OpenStreetMap (OSM) road network segments and simulates What-If scenarios for urban infrastructure planning.
 
@@ -108,13 +108,71 @@ python src/run_synthetic_pipeline.py
 
 ---
 
-## 6. Dependencies & Limitations
+## 7. Stage 2: Traffic Assignment Engine (`src/traffic_assignment.py`)
 
-- **Dependencies**: Python 3.10+, pandas, 
-umpy, geopandas, shapely, pyogrio, pyproj, 
-etworkx, matplotlib, scikit-learn, xgboost, shap, joblib, 	abulate.
-- **Current Limitations**:
-  - Model training was performed on synthetic hourly traffic observations generated from real OSM road network topology and configurable demand heuristics.
-  - Generated output datasets (synthetic_traffic.csv ~270MB, synthetic_traffic.gpkg ~716MB) exceed normal GitHub file storage limits (>100MB) and are excluded from git. They can be reproduced locally via src/run_synthetic_pipeline.py.
-- **Trip Demand Model Dependency**:
-  - Currently standalone. Future integration phases will connect origin-destination outputs from the Trip Demand Model directly into the Traffic Model.
+### Urban Mobility Pipeline Integration
+
+```
+STAGE 1: Development Scenario → Trip Generation → OD Demand Matrix
+       │
+       ▼
+STAGE 2: Traffic Assignment Engine (src/traffic_assignment.py)
+       │  Routes OD trips over OSM graph via free-flow shortest paths
+       ▼
+---
+
+## 8. Stage 3B: Scenario Traffic Aggregator (`src/traffic_aggregator.py`)
+
+### Urban Mobility Pipeline Integration
+
+```
+STAGE 1: Development Scenario → Trip Generation → OD Demand Matrix
+       │
+       ▼
+STAGE 2: Traffic Assignment Engine (src/traffic_assignment.py)
+       │  Routes OD trips over OSM graph via free-flow shortest paths
+       ▼
+Assigned Link Traffic Volume Deltas (ΔV_assigned per road segment & hour)
+       │
+       ▼
+STAGE 3B: Scenario Traffic Aggregator (src/traffic_aggregator.py)
+       │  Hybrid ML baseline prediction + Stage 2 deterministic demand addition
+       ▼
+Scenario Traffic Volume per Road Link (V_scenario = V_base + ΔV_assigned) & V/C Ratios
+       │
+       ▼
+---
+
+## 9. Stage 4: Impact Assessment & Unified What-If Simulator (`src/impact_assessment.py`, `src/simulator.py`)
+
+### Urban Mobility Pipeline Flow
+
+```
+Development Scenario (e.g. 8,000-resident compound at Z0008)
+        │
+        ▼
+Stage 1: Trip Generation & OD Demand Matrix (src/trip_generation.py)
+        │
+        ▼
+Stage 2: AON Traffic Assignment Engine (src/traffic_assignment.py)
+        │
+        ▼
+Stage 3B: Baseline XGBoost + Scenario Traffic Aggregator (src/traffic_aggregator.py)
+        │
+        ▼
+Stage 4: Traffic Impact & Level-of-Service Assessment (src/impact_assessment.py)
+        │
+        ▼
+ONE Unified What-If Function: simulate_what_if_scenario() (src/simulator.py)
+```
+
+### Key Capabilities
+- **Single Function Call**: `simulate_what_if_scenario(dev_input, hour=8)` executes all 4 stages end-to-end.
+- **Level of Service (LOS A–F)**: Classifies baseline vs scenario $V/C$ into HCM-style Level of Service grades ($A: V/C < 0.60$ up to $F: V/C \ge 1.00$).
+- **LOS Deterioration**: Detects road degradation ($\text{LOS}_{\text{base}} \rightarrow \text{LOS}_{\text{scen}}$).
+- **Impact Severity**: Categorizes link impact into `LOW`, `MODERATE`, `HIGH`, or `CRITICAL`.
+- **Bottleneck Scoring**: Ranks problematic links deterministically based on weighted $V/C$, assigned volume $\Delta V$, and LOS drop.
+- **Scenario Impact Level**: Evaluates total network health (`LOW`, `MODERATE`, `HIGH`, `CRITICAL`).
+
+
+

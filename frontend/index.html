@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Urban Digital Twin — Stylized 3D What-If Simulator</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Full-screen Cesium 3D Container -->
+    <div id="cesiumContainer"></div>
+
+    <!-- Floating Top Status Header -->
+    <div id="top-status-bar" class="top-status-bar">
+      <div class="brand">
+        <span class="status-dot pulsing"></span>
+        <span class="brand-title">AI URBAN DIGITAL TWIN</span>
+        <span class="brand-divider">|</span>
+        <span id="status-message" class="status-info">Ready — Stylized Digital Twin active</span>
+      </div>
+    </div>
+
+    <!-- Interactive Drag Placement Banner (Top Floating Badge) -->
+    <div id="placement-banner" class="placement-banner glass-panel hidden">
+      <span class="banner-icon">📍</span>
+      <span id="banner-text" class="banner-text">Move pointer over 3D city map and release to drop proposed development</span>
+      <button id="btn-cancel-placement" class="btn-banner-cancel">Cancel [ESC]</button>
+    </div>
+
+    <!-- Physical Floating Ghost Preview for Drag Interaction -->
+    <div id="drag-ghost-preview" class="drag-ghost-preview hidden">
+      <span id="ghost-icon" class="ghost-icon">🏢</span>
+      <div class="ghost-text">
+        <div id="ghost-title" class="ghost-title">Proposed Development</div>
+        <div id="ghost-sub" class="ghost-sub">Move over 3D map to place</div>
+      </div>
+    </div>
+
+    <!-- Placement Debug & Real-Time Spatial Info Panel (Bottom Right) -->
+    <div id="placement-debug-panel" class="placement-debug-panel glass-panel hidden">
+      <div class="debug-title">PHYSICAL PLACEMENT DEBUG</div>
+      <div class="debug-row"><span>Development:</span><strong id="debug-dev-type">Hospital</strong></div>
+      <div class="debug-row"><span>ID:</span><strong id="debug-dev-id">DEV-001</strong></div>
+      <div class="debug-row"><span>Footprint:</span><strong id="debug-footprint">85m × 65m × 24m</strong></div>
+      <div class="debug-row"><span>Latitude:</span><strong id="debug-lat">30.0154° N</strong></div>
+      <div class="debug-row"><span>Longitude:</span><strong id="debug-lon">31.7366° E</strong></div>
+      <div class="debug-row"><span>Nearest Zone:</span><strong id="debug-zone">Z0090</strong></div>
+      <div class="debug-row"><span>Cesium Entity:</span><span id="debug-entity-status" class="debug-badge green">FOUND / VISIBLE</span></div>
+    </div>
+
+    <!-- Left Collapsible Dashboard Sidebar -->
+    <aside id="sidebar-dashboard" class="sidebar-dashboard glass-sidebar">
+      <!-- Sidebar Header & Toggle -->
+      <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <span class="brand-icon">🌆</span>
+          <span class="sidebar-title">Digital Twin Control</span>
+        </div>
+        <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Dashboard Sidebar">
+          <span class="toggle-icon">☰</span>
+        </button>
+      </div>
+
+      <!-- Collapsible Content Wrapper -->
+      <div class="sidebar-content">
+        <!-- Section 1: Overview -->
+        <div class="sidebar-section">
+          <div class="section-header" data-target="overview-body">
+            <span class="sec-icon">📍</span>
+            <h4>Study Area Overview</h4>
+            <span class="chevron">▼</span>
+          </div>
+          <div id="overview-body" class="section-body">
+            <div class="overview-item">
+              <span class="overview-label">Location:</span>
+              <span class="overview-value">District R3, New Admin Capital</span>
+            </div>
+            <div class="overview-item">
+              <span class="overview-label">Reference Zone:</span>
+              <span class="overview-value highlight-purple">Z0090</span>
+            </div>
+            <div class="overview-item">
+              <span class="overview-label">Coordinates:</span>
+              <span class="overview-value">30.0154° N, 31.7366° E</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Add Development (Draggable Cards) -->
+        <div class="sidebar-section">
+          <div class="section-header" data-target="add-dev-body">
+            <span class="sec-icon">➕</span>
+            <h4>Add Development</h4>
+            <span class="chevron">▼</span>
+          </div>
+          <div id="add-dev-body" class="section-body">
+            <p class="drag-hint">Hold & drag a land-use card onto the 3D map:</p>
+            <div class="dev-cards-grid">
+              <div class="draggable-dev-card" data-type="residential_compound" draggable="true">
+                <span class="card-icon">🏠</span>
+                <div class="card-info">
+                  <div class="card-name">Residential Compound</div>
+                  <div class="card-desc">Master-planned housing community</div>
+                </div>
+              </div>
+
+              <div class="draggable-dev-card" data-type="hospital" draggable="true">
+                <span class="card-icon">🏥</span>
+                <div class="card-info">
+                  <div class="card-name">Hospital</div>
+                  <div class="card-desc">Healthcare & medical center</div>
+                </div>
+              </div>
+
+              <div class="draggable-dev-card" data-type="mall" draggable="true">
+                <span class="card-icon">🏬</span>
+                <div class="card-info">
+                  <div class="card-name">Commercial Mall</div>
+                  <div class="card-desc">Retail & commercial hub</div>
+                </div>
+              </div>
+
+              <div class="draggable-dev-card" data-type="school" draggable="true">
+                <span class="card-icon">🏫</span>
+                <div class="card-info">
+                  <div class="card-name">School</div>
+                  <div class="card-desc">Educational campus</div>
+                </div>
+              </div>
+
+              <div class="draggable-dev-card" data-type="office" draggable="true">
+                <span class="card-icon">🏢</span>
+                <div class="card-info">
+                  <div class="card-name">Office Complex</div>
+                  <div class="card-desc">Corporate office building</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Scenario Developments List -->
+        <div class="sidebar-section">
+          <div class="section-header" data-target="dev-list-body">
+            <span class="sec-icon">📋</span>
+            <h4>Scenario Developments (<span id="dev-count">0</span>)</h4>
+            <span class="chevron">▼</span>
+          </div>
+          <div id="dev-list-body" class="section-body">
+            <div id="dev-list-items" class="dev-list-container">
+              <p class="empty-list-msg">No developments placed yet. Drag a land-use card onto the 3D city.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 4: Simulation Trigger Button -->
+        <div class="sidebar-section">
+          <button id="btn-sidebar-run-sim" class="btn-primary full-width-btn" disabled>
+            <span>⚡</span> Run What-If Simulation
+          </button>
+        </div>
+
+        <!-- Section 5: Simulation Results Panel -->
+        <div id="section-results" class="sidebar-section hidden">
+          <div class="section-header" data-target="results-body">
+            <span class="sec-icon">📊</span>
+            <h4>Mobility Impact Results</h4>
+            <span class="chevron">▼</span>
+          </div>
+          <div id="results-body" class="section-body">
+            <div id="compact-result-content" class="compact-results"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Configure Properties Modal Window -->
+    <div id="properties-modal" class="modal-overlay hidden">
+      <div class="modal-window glass-panel-modal">
+        <div class="modal-header">
+          <h2 id="modal-title">Configure Development Properties</h2>
+          <button id="modal-close" class="close-btn">&times;</button>
+        </div>
+
+        <div id="modal-location-info" class="location-badge">
+          <span id="modal-dev-id" class="badge-id">DEV-001</span>
+          <span id="modal-dev-zone" class="badge-zone">Zone: Z0090</span>
+          <span id="modal-dev-coords" class="badge-coords">30.0154° N, 31.7366° E</span>
+        </div>
+
+        <form id="properties-form" class="properties-form">
+          <div class="form-group">
+            <label for="dev-name-input">Development Name</label>
+            <input type="text" id="dev-name-input" class="form-input" placeholder="e.g. Proposed Medical Center" required />
+          </div>
+
+          <div class="form-group">
+            <label for="simulation-hour-select">Simulation Hour (Peak Period)</label>
+            <select id="simulation-hour-select" class="form-input">
+              <option value="8" selected>08:00 AM (Morning Commute Peak)</option>
+              <option value="9">09:00 AM (Morning Peak)</option>
+              <option value="17">05:00 PM (Evening Commute Peak)</option>
+              <option value="18">06:00 PM (Evening Peak)</option>
+              <option value="12">12:00 PM (Midday Peak)</option>
+            </select>
+          </div>
+
+          <!-- Dynamic Property Fields Container -->
+          <div id="dynamic-fields-container" class="fields-container"></div>
+
+          <!-- Validation Error Alert -->
+          <div id="form-error-alert" class="form-error hidden"></div>
+
+          <div class="modal-actions">
+            <button type="button" id="btn-cancel-properties" class="btn-secondary">Cancel</button>
+            <button type="submit" id="btn-confirm-properties" class="btn-primary">Confirm Development</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Error Modal Overlay -->
+    <div id="error-overlay" class="error-modal hidden">
+      <div class="error-content glass-panel-error">
+        <h2 class="error-title">System Error</h2>
+        <p id="error-text" class="error-description">An unexpected error occurred.</p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

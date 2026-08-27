@@ -86,30 +86,55 @@ def parse_osm_xml(path: Path):
 
 def build_roads_gdf(nodes: dict, roads: list[dict]) -> gpd.GeoDataFrame:
     """
-    Convert parsed ways into a GeoDataFrame of LineString road segments.
+    Convert parsed ways into a GeoDataFrame of LineString road sub-segments split at shared intersection nodes.
 
-    Ways referencing fewer than 2 resolvable nodes are skipped (reported
-    by the caller through len(roads) vs len(gdf)).
+    Splitting ways at shared intersection nodes ensures that node_u and node_v
+    represent true topological network intersections rather than collapsed way endpoints.
     """
+    from collections import Counter
+
+    # Count occurrences of nodes across all ways to identify intersection points
+    node_counts = Counter()
+    for r in roads:
+        valid_refs = [nid for nid in r["refs"] if nid in nodes]
+        node_counts.update(valid_refs)
+
     present_keys = [k for k in TRAFFIC_TAG_KEYS
                     if any(k in r["tags"] for r in roads)]
     records, geometries, skipped = [], [], 0
+
     for r in roads:
         valid_refs = [nid for nid in r["refs"] if nid in nodes]
-        coords = [nodes[nid] for nid in valid_refs]
-        if len(coords) < 2:
+        if len(valid_refs) < 2:
             skipped += 1
             continue
-        rec = {"osm_way_id": r["osm_way_id"],
-               "node_u": valid_refs[0], "node_v": valid_refs[-1]}
-        rec.update({k: r["tags"].get(k) for k in present_keys})
-        records.append(rec)
-        geometries.append(LineString(coords))
+
+        # Split way at interior nodes that are shared with other ways (node_counts > 1)
+        split_indices = [0] + [i for i in range(1, len(valid_refs) - 1) if node_counts[valid_refs[i]] > 1] + [len(valid_refs) - 1]
+
+        for seg_idx, (start_idx, end_idx) in enumerate(zip(split_indices[:-1], split_indices[1:])):
+            if start_idx == end_idx:
+                continue
+            sub_refs = valid_refs[start_idx : end_idx + 1]
+            coords = [nodes[nid] for nid in sub_refs]
+            if len(coords) < 2:
+                continue
+
+            rec = {
+                "osm_way_id": r["osm_way_id"],
+                "seg_idx": seg_idx,
+                "node_u": sub_refs[0],
+                "node_v": sub_refs[-1],
+            }
+            rec.update({k: r["tags"].get(k) for k in present_keys})
+            records.append(rec)
+            geometries.append(LineString(coords))
 
     gdf = gpd.GeoDataFrame(records, geometry=geometries, crs=config.CRS_WGS84)
-    gdf["road_id"] = "osm_" + gdf["osm_way_id"].astype(str).str.zfill(7)
+    gdf["road_id"] = "osm_" + gdf["osm_way_id"].astype(str).str.zfill(7) + "_" + gdf["seg_idx"].astype(str)
     gdf["skipped_unresolvable"] = skipped
     return gdf
+
 
 
 def load_osm(osm_path: Path = None):

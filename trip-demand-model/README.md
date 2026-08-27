@@ -340,41 +340,68 @@ The following files are **excluded from the repository** due to size. They are r
 
 ---
 
-## 11. Current Status
+## 11. Current Status & Urban Mobility Pipeline Integration
 
-This model is currently an **independent component** of the AI Urban Digital Twin project.
+The `trip-demand-model` component serves two distinct roles in the Urban Mobility What-If Simulator:
 
-**It is NOT currently connected to:**
-- Traffic Model
-- What-If Engine
-- 3D Digital Twin
-- Infrastructure Models
-- Frontend
-- Backend
+1. **Baseline Traffic Predictor (ML Core)**: The tuned XGBoost regression model trained on static road attributes and calendar profiles. It predicts baseline background road traffic volume ($V_{\text{base}}$) without requiring historical lag features.
+2. **Stage 1 Trip Generation & OD Demand Engine (`src/trip_generation.py`)**: The deterministic land-use trip generation module that translates proposed urban developments into hourly Origin-Destination (OD) demand matrices.
+
+> **Clarification**: The ML XGBoost model predicts baseline road volume from road geometry; it is **not** a trip-generation ML model. Trip generation from land-use developments is handled explicitly by Stage 1 (`src/trip_generation.py`).
 
 ---
 
-## 12. Potential Future Integration
+## 12. Urban Mobility Pipeline Architecture
 
 ```
-Trip Demand Model
+Development Scenario (Residential, Hospital, Mall, School, Office)
        │
        ▼
-  Model Output (road-level traffic_volume)
+STAGE 1: Trip Generation Engine (src/trip_generation.py)
+       │  Generates daily/hourly trips (Productions & Attractions)
+       ▼
+Gravity Model Trip Distribution
+       │  Distributes trips across spatial zones (zone_osm_mapping_v2.csv)
+       ▼
+Origin-Destination (OD) Demand Matrix (OD_added)
        │
        ▼
-  Traffic Model (validation / comparison)
-       │
+STAGE 2: [Future] Traffic Assignment Engine (OSM Graph Routing)
+       │  Routes OD demand over shortest OSM paths → ΔV_assigned
        ▼
-  What-If Engine (scenario simulation)
-       │
+STAGE 3: [Future] Traffic Model Aggregator
+       │  Calculates Total Volume V_total = V_base + ΔV_assigned & Operating Speed
        ▼
-  3D Digital Twin (visualization)
+STAGE 4: [Future] Congestion & Capacity Impact Assessment (V/C, Level of Service)
 ```
 
 ---
 
-## 13. Key Decisions
+## 13. Stage 1: Trip Generation Module (`src/trip_generation.py`)
+
+### Development Types & Scale Parameters
+
+| Development Type | Primary Scale Input | Secondary Scale Input | Configurable Daily Trip Rates |
+|:---|:---|:---|:---|
+| `residential_compound` | `num_residents` | `num_units` | 0.8 trips/resident/day |
+| `hospital` | `num_beds` | `staff_count` | 2.5 trips/bed/day |
+| `mall` | `gross_leasable_area_sqm` | `visitor_capacity` | 40.0 trips/100m² GLA/day |
+| `school` | `num_students` | `staff_count` | 1.2 trips/student/day |
+| `office` | `num_employees` | `gross_floor_area_sqm` | 2.0 trips/employee/day |
+
+*Configuration files: `config/trip_generation_rates.json` and `config/hourly_profiles.json`.*
+
+### Gravity Model Trip Distribution
+
+Trips produced by origin zone $i$ at hour $h$ ($P_i(h)$) are distributed to surrounding destination zones $j$ via:
+
+$$T_{ij}(h) = P_i(h) \times \frac{A_j \cdot d_{ij}^{-\gamma}}{\sum_k A_k \cdot d_{ik}^{-\gamma}}$$
+
+where $d_{ij}$ is the Haversine centroid distance between zone $i$ and zone $j$, $A_j$ is the zone attraction weight, and $\gamma$ is the gravity impedance parameter (default $\gamma = 1.5$).
+
+---
+
+## 14. Key Decisions
 
 - **Leakage**: `volume_capacity_ratio` / `congestion_level` were target-derived and excluded upstream; audit in `reports/leakage_audit.md`.
 - **Cleaning**: Dropped constant `intersection_density`, redundant ordinal `highway_code`; no missing values or duplicates.
@@ -383,3 +410,4 @@ Trip Demand Model
 - **`is_weekend`**: Fri/Sat convention (Egyptian work-week) — matches observed demand dip.
 - **No lag features**: Dataset has none; model = road traits × calendar profile, suitable for hypothetical networks in What-If simulation.
 - **MAPE excluded**: 36.8% zero-volume rows make percentage error mathematically undefined.
+

@@ -1,0 +1,31 @@
+{
+  "prototype_disclaimer": "These Level-of-Service (LOS) thresholds and impact severity rules are simplified prototype assumptions for demonstration and initial urban planning scenario evaluation. They do not constitute official Highway Capacity Manual (HCM) certification.",
+  "los_thresholds": {
+    "A": 0.60,
+    "B": 0.70,
+    "C": 0.80,
+    "D": 0.90,
+    "E": 1.00,
+    "F": 999.0
+  },
+  "impact_severity_rules": {
+    "critical_vc_threshold": 1.00,
+    "critical_los": "F",
+    "high_vc_threshold": 0.90,
+    "high_los_drop": 2,
+    "moderate_vc_threshold": 0.80,
+    "moderate_los_drop": 1
+  },
+  "bottleneck_scoring_weights": {
+    "weight_vc": 0.40,
+    "weight_delta_volume": 0.30,
+    "weight_los_deterioration": 0.30,
+    "max_reference_delta_veh_h": 500.0
+  },
+  "overall_impact_rules": {
+    "critical_vc": 1.00,
+    "high_vc": 0.90,
+    "high_worsened_road_count": 5,
+    "moderate_worsened_road_count": 1
+  }
+}

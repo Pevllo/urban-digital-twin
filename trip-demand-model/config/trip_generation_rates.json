@@ -1,0 +1,68 @@
+{
+  "_meta": {
+    "description": "Trip generation rates and directionality factors for development types in the AI Urban Digital Twin What-If Simulator.",
+    "disclaimer": "These values are configurable prototype/demo assumptions for testing and demonstration, NOT officially adopted Egyptian or ITE planning standards."
+  },
+  "rates": {
+    "residential_compound": {
+      "rates": {
+        "trips_per_resident_per_day": 0.8,
+        "trips_per_unit_per_day": 3.2
+      },
+      "peak_hour_factor": 0.10,
+      "directionality": {
+        "morning_peak": { "outbound": 0.70, "inbound": 0.30 },
+        "evening_peak": { "outbound": 0.30, "inbound": 0.70 },
+        "off_peak": { "outbound": 0.50, "inbound": 0.50 }
+      }
+    },
+    "hospital": {
+      "rates": {
+        "trips_per_bed_per_day": 2.5,
+        "trips_per_staff_per_day": 1.5
+      },
+      "peak_hour_factor": 0.08,
+      "directionality": {
+        "morning_peak": { "outbound": 0.40, "inbound": 0.60 },
+        "evening_peak": { "outbound": 0.50, "inbound": 0.50 },
+        "off_peak": { "outbound": 0.50, "inbound": 0.50 }
+      }
+    },
+    "mall": {
+      "rates": {
+        "trips_per_100sqm_gla_per_day": 40.0,
+        "trips_per_visitor_capacity_per_day": 2.0
+      },
+      "peak_hour_factor": 0.12,
+      "directionality": {
+        "morning_peak": { "outbound": 0.30, "inbound": 0.70 },
+        "evening_peak": { "outbound": 0.55, "inbound": 0.45 },
+        "off_peak": { "outbound": 0.50, "inbound": 0.50 }
+      }
+    },
+    "school": {
+      "rates": {
+        "trips_per_student_per_day": 1.2,
+        "trips_per_staff_per_day": 1.8
+      },
+      "peak_hour_factor": 0.15,
+      "directionality": {
+        "morning_peak": { "outbound": 0.30, "inbound": 0.70 },
+        "evening_peak": { "outbound": 0.70, "inbound": 0.30 },
+        "off_peak": { "outbound": 0.50, "inbound": 0.50 }
+      }
+    },
+    "office": {
+      "rates": {
+        "trips_per_employee_per_day": 2.0,
+        "trips_per_100sqm_gfa_per_day": 12.0
+      },
+      "peak_hour_factor": 0.12,
+      "directionality": {
+        "morning_peak": { "outbound": 0.20, "inbound": 0.80 },
+        "evening_peak": { "outbound": 0.80, "inbound": 0.20 },
+        "off_peak": { "outbound": 0.50, "inbound": 0.50 }
+      }
+    }
+  }
+}
