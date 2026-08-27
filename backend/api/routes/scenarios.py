@@ -12,7 +12,8 @@ def simulate_scenario(payload: SimulationRequestSchema):
             zone_id=payload.zone_id,
             properties=payload.properties,
             name=payload.name,
-            hour=payload.simulation_hour or 8
+            hour=payload.simulation_hour or 8,
+            dev_id=payload.development_id
         )
         return result
     except ValueError as ve:

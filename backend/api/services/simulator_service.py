@@ -12,12 +12,13 @@ for d in [MODELS_DIR / "traffic-model" / "src", MODELS_DIR / "trip-demand-model"
 from trip_generation import DevelopmentInput
 from simulator import simulate_what_if_scenario
 
-def run_simulation(dev_type: str, zone_id: str, properties: dict, name: str = "", hour: int = 8) -> dict:
+def run_simulation(dev_type: str, zone_id: str, properties: dict, name: str = "", hour: int = 8, dev_id: str = "") -> dict:
     dev_input = DevelopmentInput(
         development_type=dev_type,
         zone_id=zone_id,
         properties=properties,
         name=name or dev_type,
+        development_id=dev_id,
     )
     result = simulate_what_if_scenario(dev_input, hour=hour)
     return result.to_dict()

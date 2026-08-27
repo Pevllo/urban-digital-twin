@@ -45,6 +45,7 @@ class DevelopmentInput:
     zone_id: str
     properties: Dict[str, float]
     name: Optional[str] = None
+    development_id: Optional[str] = None
     simulation_hour: Optional[int] = None
 
     def __post_init__(self):
