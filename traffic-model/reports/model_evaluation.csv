@@ -1,0 +1,2 @@
+subset,MAE,RMSE,R2,MAPE_%,n
+full_test,23.69,67.53,0.9639,14.54,245199

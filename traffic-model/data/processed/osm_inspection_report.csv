@@ -1,0 +1,30 @@
+metric,value
+file,C:\Users\Pavlly\OneDrive\Desktop\traffic_model\data\raw\osm\map.osm
+file_size_MB,11.72
+format,OSM XML v0.6 (Overpass export)
+crs,EPSG:4326
+geometry_type,LineString
+road_segments,3573
+ways_skipped_unresolvable_nodes,0
+total_xml_elements,"nodes=50758, ways=5205, relations=44"
+bbox_min_lon_lat,"31.67808, 29.96547"
+bbox_max_lon_lat,"31.84656, 30.10208"
+duplicate_way_ids,0
+duplicate_geometries,0
+attr_name,"present, missing=98.9%"
+attr_name:en,"present, missing=98.9%"
+attr_name:ar,"present, missing=98.9%"
+attr_ref,"present, missing=99.7%"
+attr_lanes,"present, missing=99.4%"
+attr_maxspeed,ABSENT from data
+attr_oneway,"present, missing=70.4%"
+attr_bridge,"present, missing=99.5%"
+attr_tunnel,"present, missing=99.8%"
+attr_access,"present, missing=89.8%"
+attr_service,"present, missing=97.9%"
+attr_junction,"present, missing=98.9%"
+attr_surface,"present, missing=99.1%"
+attr_width,ABSENT from data
+invalid_geometries,0
+total_network_km,948.5
+mean_segment_m,265.5
