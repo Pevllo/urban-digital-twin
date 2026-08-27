@@ -12,6 +12,19 @@ import { runWhatIfSimulation } from './services/api/simulationApi.js';
 import { validateBuildability } from './utils/buildabilityEngine.js';
 import { createDevelopmentModel } from './types/development.js';
 
+/**
+ * Dynamic City / Study Area Configuration
+ */
+export const CITY_CONFIG = {
+  studyAreaName: 'District R3, New Administrative Capital',
+  shortBadgeName: 'R3 • New Capital',
+  referenceZoneId: 'Z0090',
+  defaultCoordinatesText: '30.0154° N, 31.7366° E',
+  centerLon: 31.7366,
+  centerLat: 30.0154,
+  cameraHeight: 1300,
+};
+
 export function initializeApp() {
   const devStore = new DevelopmentStore();
   let viewer = null;
@@ -21,26 +34,45 @@ export function initializeApp() {
   let editingDevId = null;
   let currentView = 'map';
 
-  // DOM Elements
+  // DOM Elements — Header & Navigation
   const statusEl = document.getElementById('status-message');
   const statusDot = document.querySelector('.status-dot');
+  const badgeAreaName = document.getElementById('badge-area-name');
+  const btnHamburgerMenu = document.getElementById('btn-hamburger-menu');
+  const hamburgerDropdown = document.getElementById('hamburger-dropdown');
+  const menuToggleSidebar = document.getElementById('menu-toggle-sidebar');
+  const menuResetCamera = document.getElementById('menu-reset-camera');
+  const menuToggleDebug = document.getElementById('menu-toggle-debug');
+  const menuAbout = document.getElementById('menu-about');
+
+  // DOM Elements — Sidebar & Panels
   const sidebar = document.getElementById('sidebar-dashboard');
   const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebarPanelTitle = document.getElementById('sidebar-panel-title');
+  const studyAreaTitle = document.getElementById('study-area-title');
+  const studyAreaZone = document.getElementById('study-area-zone');
+  const studyAreaCoords = document.getElementById('study-area-coords');
+  const mapScenarioCount = document.getElementById('map-scenario-count');
   const devCardsContainer = document.querySelector('.dev-cards-grid');
   const devListItemsEl = document.getElementById('dev-list-items');
   const devCountEl = document.getElementById('dev-count');
-  const btnSidebarRunSim = document.getElementById('btn-sidebar-run-sim');
-  const sectionResults = document.getElementById('section-results');
+  const btnGotoAddDev = document.getElementById('btn-goto-add-dev');
+  const btnGotoDevelopments = document.getElementById('btn-goto-developments');
+
+  // DOM Elements — Simulation & Results
+  const simDevSelect = document.getElementById('sim-dev-select');
+  const simulationHourSelectSim = document.getElementById('simulation-hour-select-sim');
+  const btnRunSimulation = document.getElementById('btn-run-simulation');
+  const btnSimText = document.getElementById('btn-sim-text');
+  const simStatusBanner = document.getElementById('sim-status-banner');
   const compactResultContent = document.getElementById('compact-result-content');
+
+  // Placement Pill Banner & Debug Panel
   const placementBanner = document.getElementById('placement-banner');
   const bannerText = document.getElementById('banner-text');
   const btnCancelPlacement = document.getElementById('btn-cancel-placement');
-  const dragGhost = document.getElementById('drag-ghost-preview');
-  const ghostTitle = document.getElementById('ghost-title');
-  const ghostSub = document.getElementById('ghost-sub');
-  const btnToggleDebug = document.getElementById('btn-toggle-debug');
 
-  // Modal Elements
+  // Modal Windows
   const propertiesModal = document.getElementById('properties-modal');
   const modalTitle = document.getElementById('modal-title');
   const modalClose = document.getElementById('modal-close');
@@ -55,6 +87,9 @@ export function initializeApp() {
   const btnCancelProperties = document.getElementById('btn-cancel-properties');
   const btnConfirmProperties = document.getElementById('btn-confirm-properties');
 
+  const aboutModal = document.getElementById('about-modal');
+  const aboutModalClose = document.getElementById('about-modal-close');
+
   // Debug Panel Elements
   const debugElements = {
     panel: document.getElementById('placement-debug-panel'),
@@ -67,18 +102,23 @@ export function initializeApp() {
     status: document.getElementById('debug-entity-status'),
   };
 
+  // Populate Dynamic City Configuration
+  if (badgeAreaName) badgeAreaName.textContent = CITY_CONFIG.shortBadgeName;
+  if (studyAreaTitle) studyAreaTitle.textContent = CITY_CONFIG.studyAreaName;
+  if (studyAreaZone) studyAreaZone.textContent = CITY_CONFIG.referenceZoneId;
+  if (studyAreaCoords) studyAreaCoords.textContent = CITY_CONFIG.defaultCoordinatesText;
+
   function updateStatus(msg, isComplete = false) {
     if (statusEl) statusEl.textContent = msg;
     if (isComplete && statusDot) {
       statusDot.classList.remove('pulsing');
-      statusDot.classList.add('success');
     }
   }
 
   function switchView(viewName) {
     currentView = viewName;
 
-    // Update active navigation tabs
+    // 1. Update Navigation Tabs Active Class
     const navTabs = document.querySelectorAll('.nav-tab');
     navTabs.forEach((tab) => {
       if (tab.getAttribute('data-view') === viewName) {
@@ -88,17 +128,63 @@ export function initializeApp() {
       }
     });
 
-    // Toggle sidebar expansion based on contextual view
-    if (sidebar) {
-      if (viewName === 'map') {
-        sidebar.classList.add('collapsed');
-      } else {
-        sidebar.classList.remove('collapsed');
+    // 2. Hide all panels and display target view panel
+    const panels = {
+      map: document.getElementById('panel-map'),
+      developments: document.getElementById('panel-developments'),
+      simulation: document.getElementById('panel-simulation'),
+      results: document.getElementById('panel-results'),
+    };
+
+    const panelTitles = {
+      map: 'Map Overview',
+      developments: 'Scenario Developments',
+      simulation: 'What-If Simulation',
+      results: 'Mobility Impact Results',
+    };
+
+    Object.keys(panels).forEach((pKey) => {
+      if (panels[pKey]) {
+        if (pKey === viewName) {
+          panels[pKey].classList.remove('hidden');
+        } else {
+          panels[pKey].classList.add('hidden');
+        }
       }
+    });
+
+    if (sidebarPanelTitle) sidebarPanelTitle.textContent = panelTitles[viewName] || 'Digital Twin';
+
+    // 3. Ensure Sidebar is expanded when interacting with views
+    if (sidebar) {
+      sidebar.classList.remove('collapsed');
     }
 
     if (viewer) {
-      setTimeout(() => viewer.resize(), 250);
+      setTimeout(() => viewer.resize(), 200);
+    }
+  }
+
+  function updateSimSelectDropdown() {
+    if (!simDevSelect) return;
+    const allDevs = devStore.getAllDevelopments();
+    const currentSelectedId = scenarioState.getState().selectedDevIdForSim;
+
+    simDevSelect.innerHTML = '<option value="">-- Select Placed Development --</option>';
+
+    allDevs.forEach((dev) => {
+      const opt = document.createElement('option');
+      opt.value = dev.id || dev.development_id;
+      opt.textContent = `${dev.name || dev.id} (${dev.development_type.toUpperCase()}) — Zone ${dev.zone_id || 'Z0090'}`;
+      if (opt.value === currentSelectedId) {
+        opt.selected = true;
+      }
+      simDevSelect.appendChild(opt);
+    });
+
+    const hasSelection = !!scenarioState.getState().selectedDevIdForSim;
+    if (btnRunSimulation) {
+      btnRunSimulation.disabled = !hasSelection || scenarioState.getState().isSimulationRunning;
     }
   }
 
@@ -109,7 +195,7 @@ export function initializeApp() {
 
     modalTitle.textContent = isNew ? `Configure ${config.label}` : `Edit ${devRecord.name}`;
     modalDevId.textContent = devRecord.id || devRecord.development_id;
-    modalDevZone.textContent = `Zone: ${devRecord.zone_id || 'unresolved'}`;
+    modalDevZone.textContent = `Zone: ${devRecord.zone_id || CITY_CONFIG.referenceZoneId}`;
     modalDevCoords.textContent = `${devRecord.latitude.toFixed(4)}° N, ${devRecord.longitude.toFixed(4)}° E`;
 
     devNameInput.value = devRecord.name || `${config.label} ${devRecord.id || devRecord.development_id}`;
@@ -190,7 +276,7 @@ export function initializeApp() {
       return;
     }
 
-    // Perform final buildability re-validation using the FINAL properties and dimensions
+    // Perform final buildability re-validation against LOCKED coordinates
     const existingDevs = devStore.getAllDevelopments().filter(d => d.id !== targetDevId && d.development_id !== targetDevId);
     const finalModel = createDevelopmentModel({
       id: targetDevId,
@@ -229,7 +315,7 @@ export function initializeApp() {
       developmentRenderer.renderDevelopment(record);
       scenarioState.setSelectedDevForSim(record.id);
       refreshDevList();
-      updateStatus(`Confirmed ${record.name} in Zone ${record.zone_id || 'unresolved'}`, true);
+      updateStatus(`Confirmed ${record.name} in Zone ${record.zone_id || CITY_CONFIG.referenceZoneId}`, true);
     }
 
     propertiesModal.classList.add('hidden');
@@ -238,11 +324,17 @@ export function initializeApp() {
   }
 
   function refreshDevList() {
+    const allDevs = devStore.getAllDevelopments();
+    if (mapScenarioCount) {
+      mapScenarioCount.textContent = `${allDevs.length} Development${allDevs.length === 1 ? '' : 's'}`;
+    }
+
     renderDevelopmentList(devListItemsEl, devStore, {
       devCountEl,
-      btnRunSimEl: btnSidebarRunSim,
+      btnRunSimEl: btnRunSimulation,
       onSelect: (dev) => {
         scenarioState.setSelectedDevForSim(dev.id);
+        updateSimSelectDropdown();
         if (viewer && typeof dev.longitude === 'number' && typeof dev.latitude === 'number' && !Number.isNaN(dev.longitude) && !Number.isNaN(dev.latitude)) {
           viewer.camera.flyTo({
             destination: Cartesian3.fromDegrees(dev.longitude, dev.latitude, 850),
@@ -254,7 +346,7 @@ export function initializeApp() {
       onMove: (dev) => {
         if (placementController) placementController.setMovingId(dev.id);
         if (placementBanner) placementBanner.classList.remove('hidden');
-        if (bannerText) bannerText.textContent = `Repositioning ${dev.id}... Click new location on 3D map`;
+        if (bannerText) bannerText.textContent = `REPOSITIONING ${dev.id} — Click new location on 3D map`;
         updateStatus(`Moving ${dev.id} — Click new 3D location`);
       },
       onDelete: (dev) => {
@@ -267,6 +359,8 @@ export function initializeApp() {
         updateStatus(`Deleted ${dev.id}`);
       },
     });
+
+    updateSimSelectDropdown();
   }
 
   async function handleTriggerSimulation(devRecord) {
@@ -278,21 +372,42 @@ export function initializeApp() {
     }
 
     scenarioState.setSimulationRunning(true);
+    if (btnRunSimulation) btnRunSimulation.disabled = true;
+    if (btnSimText) btnSimText.textContent = 'RUNNING SIMULATION...';
+    if (simStatusBanner) {
+      simStatusBanner.className = 'sim-status-box info';
+      simStatusBanner.textContent = `Running What-If travel demand model for ${devRecord.name}...`;
+      simStatusBanner.classList.remove('hidden');
+    }
+
     updateStatus(`Running What-If simulation for ${devRecord.name}...`);
-    btnSidebarRunSim.disabled = true;
 
     try {
-      const result = await runWhatIfSimulation(devRecord, devRecord.simulation_hour || 8);
+      const selectedHour = simulationHourSelectSim ? parseInt(simulationHourSelectSim.value || '8', 10) : 8;
+      const result = await runWhatIfSimulation(devRecord, selectedHour);
       scenarioState.setSimulationResult(result);
       renderSimulationResults(compactResultContent, result);
-      if (sectionResults) sectionResults.classList.remove('hidden');
+
+      if (simStatusBanner) {
+        simStatusBanner.className = 'sim-status-box success';
+        simStatusBanner.textContent = `✓ Simulation completed for ${devRecord.name}!`;
+      }
+      if (btnSimText) btnSimText.textContent = '✓ SIMULATION COMPLETE';
+
       switchView('results');
       updateStatus(`Simulation completed for ${devRecord.name}`, true);
     } catch (err) {
+      if (simStatusBanner) {
+        simStatusBanner.className = 'sim-status-box error';
+        simStatusBanner.textContent = `Simulation failed: ${err.message}`;
+      }
+      if (btnSimText) btnSimText.textContent = '⚡ RUN WHAT-IF SIMULATION';
       updateStatus(`Simulation failed: ${err.message}`);
     } finally {
       scenarioState.setSimulationRunning(false);
-      btnSidebarRunSim.disabled = false;
+      if (btnRunSimulation) {
+        btnRunSimulation.disabled = !scenarioState.getState().selectedDevIdForSim;
+      }
     }
   }
 
@@ -315,7 +430,7 @@ export function initializeApp() {
 
     placementController.initScreenEvents();
 
-    // Top Navigation Tabs View Switcher
+    // 1. Navigation Tab View Switcher
     const navTabs = document.querySelectorAll('.nav-tab');
     navTabs.forEach((tab) => {
       tab.addEventListener('click', () => {
@@ -324,59 +439,118 @@ export function initializeApp() {
       });
     });
 
-    if (btnToggleDebug) {
-      btnToggleDebug.addEventListener('click', () => {
+    // 2. Hamburger Dropdown Menu Handlers
+    if (btnHamburgerMenu && hamburgerDropdown) {
+      btnHamburgerMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hamburgerDropdown.classList.toggle('hidden');
+      });
+
+      document.addEventListener('click', () => {
+        hamburgerDropdown.classList.add('hidden');
+      });
+    }
+
+    if (menuToggleSidebar) {
+      menuToggleSidebar.addEventListener('click', () => {
+        if (sidebar) sidebar.classList.toggle('collapsed');
+        setTimeout(() => viewer.resize(), 200);
+      });
+    }
+
+    if (menuResetCamera) {
+      menuResetCamera.addEventListener('click', () => {
+        if (viewer) {
+          viewer.camera.flyTo({
+            destination: Cartesian3.fromDegrees(CITY_CONFIG.centerLon, CITY_CONFIG.centerLat, CITY_CONFIG.cameraHeight),
+            duration: 1.5,
+          });
+          updateStatus('Camera reset to default Study Area view.');
+        }
+      });
+    }
+
+    if (menuToggleDebug) {
+      menuToggleDebug.addEventListener('click', () => {
         if (debugElements.panel) {
           debugElements.panel.classList.toggle('hidden');
         }
       });
     }
 
+    if (menuAbout && aboutModal) {
+      menuAbout.addEventListener('click', () => {
+        aboutModal.classList.remove('hidden');
+      });
+    }
+
+    if (aboutModalClose && aboutModal) {
+      aboutModalClose.addEventListener('click', () => {
+        aboutModal.classList.add('hidden');
+      });
+    }
+
+    // 3. Quick Action Navigation Buttons inside View Panels
+    if (btnGotoAddDev) {
+      btnGotoAddDev.addEventListener('click', () => {
+        switchView('map');
+      });
+    }
+
+    if (btnGotoDevelopments) {
+      btnGotoDevelopments.addEventListener('click', () => {
+        switchView('developments');
+      });
+    }
+
+    if (simDevSelect) {
+      simDevSelect.addEventListener('change', () => {
+        const devId = simDevSelect.value;
+        if (devId) {
+          scenarioState.setSelectedDevForSim(devId);
+          if (btnRunSimulation) btnRunSimulation.disabled = false;
+          if (btnSimText) btnSimText.textContent = '⚡ RUN WHAT-IF SIMULATION';
+          if (simStatusBanner) simStatusBanner.classList.add('hidden');
+        }
+      });
+    }
+
+    // 4. Render Development Palette Cards
     renderPaletteCards(devCardsContainer, (typeKey, spec, event) => {
       placementController.startPlacement(typeKey, spec, event);
       if (placementBanner) placementBanner.classList.remove('hidden');
-      if (bannerText) bannerText.textContent = `Placing ${spec.label}: Click or move over 3D map to place`;
-      if (dragGhost) {
-        ghostTitle.textContent = spec.label;
-        ghostSub.textContent = 'Move over 3D map';
-        dragGhost.style.left = `${event.clientX}px`;
-        dragGhost.style.top = `${event.clientY}px`;
-        dragGhost.classList.remove('hidden');
-      }
+      if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
     });
 
     window.addEventListener('pointermove', (e) => {
-      if (dragGhost && !dragGhost.classList.contains('hidden')) {
-        dragGhost.style.left = `${e.clientX}px`;
-        dragGhost.style.top = `${e.clientY}px`;
-      }
       if (placementController) placementController.handlePointerMove(e);
     });
 
     window.addEventListener('pointerup', (e) => {
-      if (dragGhost) dragGhost.classList.add('hidden');
       if (placementBanner) placementBanner.classList.add('hidden');
       if (placementController) placementController.handlePointerUp(e);
     });
 
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && placementController) {
-        placementController.cancelPlacementMode();
+      if (e.key === 'Escape') {
+        if (placementController) placementController.cancelPlacementMode();
         if (placementBanner) placementBanner.classList.add('hidden');
-        if (dragGhost) dragGhost.classList.add('hidden');
+        if (hamburgerDropdown) hamburgerDropdown.classList.add('hidden');
+        if (aboutModal) aboutModal.classList.add('hidden');
       }
     });
 
     if (sidebarToggle) {
       sidebarToggle.addEventListener('click', () => {
         if (sidebar) sidebar.classList.toggle('collapsed');
-        setTimeout(() => viewer.resize(), 300);
+        setTimeout(() => viewer.resize(), 250);
       });
     }
 
     if (btnCancelPlacement) {
       btnCancelPlacement.addEventListener('click', () => {
         if (placementController) placementController.cancelPlacementMode();
+        if (placementBanner) placementBanner.classList.add('hidden');
       });
     }
 
@@ -391,9 +565,9 @@ export function initializeApp() {
     if (propertiesForm) propertiesForm.addEventListener('submit', triggerSubmit);
     if (btnConfirmProperties) btnConfirmProperties.addEventListener('click', triggerSubmit);
 
-    if (btnSidebarRunSim) {
-      btnSidebarRunSim.addEventListener('click', () => {
-        const simDevId = scenarioState.getState().selectedDevIdForSim;
+    if (btnRunSimulation) {
+      btnRunSimulation.addEventListener('click', () => {
+        const simDevId = scenarioState.getState().selectedDevIdForSim || (simDevSelect ? simDevSelect.value : null);
         if (simDevId) {
           const record = devStore.getDevelopment(simDevId);
           if (record) handleTriggerSimulation(record);
