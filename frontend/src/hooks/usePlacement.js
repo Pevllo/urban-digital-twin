@@ -2,6 +2,12 @@ import { ScreenSpaceEventHandler, ScreenSpaceEventType } from 'cesium';
 import { pickGeographicLocation } from '../utils/geoUtils.js';
 import { validateBuildability } from '../utils/buildabilityEngine.js';
 
+export const PLACEMENT_STATES = {
+  IDLE: 'IDLE',
+  PLACING: 'PLACING',
+  CONFIGURING: 'CONFIGURING',
+};
+
 export function createPlacementController(viewer, options = {}) {
   const {
     devStore,
@@ -12,6 +18,7 @@ export function createPlacementController(viewer, options = {}) {
     debugElements = {},
   } = options;
 
+  let placementState = PLACEMENT_STATES.IDLE;
   let activePlacementType = null;
   let isDraggingFromSidebar = false;
   let movingDevId = null;
@@ -26,6 +33,11 @@ export function createPlacementController(viewer, options = {}) {
 
     // Single Left Click handler: Repositioning, Click-to-place, or Entity Selection
     screenHandler.setInputAction((click) => {
+      // If modal is currently open configuring properties, ignore map clicks
+      if (placementState === PLACEMENT_STATES.CONFIGURING || pendingPlacementLocation) {
+        return;
+      }
+
       // 1. Move/Repositioning mode confirmation
       if (movingDevId) {
         const devRecord = devStore.getDevelopment(movingDevId);
@@ -49,7 +61,7 @@ export function createPlacementController(viewer, options = {}) {
       }
 
       // 2. Click-to-place mode (when active placement initiated via palette)
-      if (activePlacementType && !isDraggingFromSidebar) {
+      if (activePlacementType && !isDraggingFromSidebar && placementState === PLACEMENT_STATES.PLACING) {
         const picked = pickGeographicLocation(viewer, click.position.x, click.position.y, buildabilityOverlay.getPreviewEntity());
         if (picked) {
           const existingDevs = devStore.getAllDevelopments();
@@ -66,8 +78,14 @@ export function createPlacementController(viewer, options = {}) {
               zone_id: picked.zone_id,
               isNew: true,
             };
-            if (onOpenPropertiesModal) onOpenPropertiesModal(pendingPlacementLocation);
-            activePlacementType = null;
+
+            // Transition state to CONFIGURING and freeze/clear preview
+            placementState = PLACEMENT_STATES.CONFIGURING;
+            buildabilityOverlay.clearPreview();
+
+            if (onOpenPropertiesModal) {
+              onOpenPropertiesModal(pendingPlacementLocation);
+            }
           } else if (onStatusUpdate) {
             onStatusUpdate(`Invalid placement location: ${validation.reason}`);
           }
@@ -75,16 +93,18 @@ export function createPlacementController(viewer, options = {}) {
         return;
       }
 
-      // 3. Persistent 3D Entity Selection
-      const pickedObject = viewer.scene.pick(click.position);
-      if (pickedObject && pickedObject.id) {
-        const entity = pickedObject.id;
-        const devId = (entity.properties && entity.properties.developmentId ? entity.properties.developmentId.getValue() : null) || entity.devId || entity.id;
+      // 3. Persistent 3D Entity Selection (only when idle)
+      if (placementState === PLACEMENT_STATES.IDLE) {
+        const pickedObject = viewer.scene.pick(click.position);
+        if (pickedObject && pickedObject.id) {
+          const entity = pickedObject.id;
+          const devId = (entity.properties && entity.properties.developmentId ? entity.properties.developmentId.getValue() : null) || entity.devId || entity.id;
 
-        if (devId) {
-          const devRecord = devStore.getDevelopment(devId);
-          if (devRecord && onOpenPropertiesModal) {
-            onOpenPropertiesModal({ ...devRecord, isNew: false });
+          if (devId) {
+            const devRecord = devStore.getDevelopment(devId);
+            if (devRecord && onOpenPropertiesModal) {
+              onOpenPropertiesModal({ ...devRecord, isNew: false });
+            }
           }
         }
       }
@@ -92,16 +112,20 @@ export function createPlacementController(viewer, options = {}) {
   }
 
   function startPlacement(typeKey, spec, event) {
-    // Teardown any lingering placement session first to enforce single session state
+    // Teardown any lingering placement session first
     cancelPlacementMode();
 
+    placementState = PLACEMENT_STATES.PLACING;
     activePlacementType = typeKey;
     isDraggingFromSidebar = true;
     if (onStatusUpdate) onStatusUpdate(`PLACEMENT MODE ACTIVE — Move footprint over 3D map to place ${spec.label}`);
   }
 
   function handlePointerMove(e) {
-    if (!activePlacementType) return;
+    // Disable pointer move loop completely while configuring modal is open or when idle
+    if (placementState !== PLACEMENT_STATES.PLACING || !activePlacementType || pendingPlacementLocation) {
+      return;
+    }
 
     const picked = pickGeographicLocation(viewer, e.clientX, e.clientY, buildabilityOverlay.getPreviewEntity());
 
@@ -122,7 +146,7 @@ export function createPlacementController(viewer, options = {}) {
   }
 
   function handlePointerUp(e) {
-    if (!isDraggingFromSidebar || !activePlacementType) return;
+    if (!isDraggingFromSidebar || placementState !== PLACEMENT_STATES.PLACING || !activePlacementType) return;
     isDraggingFromSidebar = false;
 
     const releasePick = pickGeographicLocation(viewer, e.clientX, e.clientY, buildabilityOverlay.getPreviewEntity());
@@ -142,7 +166,14 @@ export function createPlacementController(viewer, options = {}) {
           zone_id: releasePick.zone_id,
           isNew: true,
         };
-        if (onOpenPropertiesModal) onOpenPropertiesModal(pendingPlacementLocation);
+
+        // Transition state to CONFIGURING and freeze/clear preview
+        placementState = PLACEMENT_STATES.CONFIGURING;
+        buildabilityOverlay.clearPreview();
+
+        if (onOpenPropertiesModal) {
+          onOpenPropertiesModal(pendingPlacementLocation);
+        }
       } else {
         if (onStatusUpdate) onStatusUpdate(`Placement rejected: ${validation.reason}`);
         cancelPlacementMode();
@@ -153,6 +184,7 @@ export function createPlacementController(viewer, options = {}) {
   }
 
   function cancelPlacementMode() {
+    placementState = PLACEMENT_STATES.IDLE;
     activePlacementType = null;
     isDraggingFromSidebar = false;
     movingDevId = null;
@@ -174,9 +206,14 @@ export function createPlacementController(viewer, options = {}) {
     return pendingPlacementLocation;
   }
 
+  function getState() {
+    return placementState;
+  }
+
   function setMovingId(id) {
     cancelPlacementMode();
     movingDevId = id;
+    placementState = PLACEMENT_STATES.PLACING;
   }
 
   return {
@@ -187,6 +224,7 @@ export function createPlacementController(viewer, options = {}) {
     cancelPlacementMode,
     destroy,
     getPendingLocation,
+    getState,
     setMovingId,
   };
 }
