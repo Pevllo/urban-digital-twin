@@ -148,12 +148,69 @@ export function metricPointToSegmentDistance(px, py, ax, ay, bx, by) {
 }
 
 /**
- * Geographic 3D Position Picker with safe fallback chain:
- * 1. scene.pickPosition(windowPosition)
- * 2. globe.pick(ray, scene)
- * 3. pickEllipsoid(windowPosition)
+ * Unified building Cartesian position generator.
+ * Position is calculated at height / 2 with HeightReference.RELATIVE_TO_GROUND
+ * so the base of the building volume rests precisely on the terrain surface.
  */
-export function pickGeographicLocation(viewer, clientX, clientY, previewEntity = null) {
+export function getBuildingPositionCartesian(longitude, latitude, buildingHeight = 0.0) {
+  if (
+    typeof longitude !== 'number' ||
+    typeof latitude !== 'number' ||
+    Number.isNaN(longitude) ||
+    Number.isNaN(latitude)
+  ) {
+    return null;
+  }
+  const h = (typeof buildingHeight === 'number' && !Number.isNaN(buildingHeight) && buildingHeight > 0)
+    ? buildingHeight
+    : 0.0;
+
+  // Center elevation at h / 2 meters above ground level
+  return Cartesian3.fromDegrees(longitude, latitude, h / 2.0);
+}
+
+/**
+ * Calculates 4 corner points in WGS84 [longitude, latitude] degrees for a footprint centered
+ * at (latitude, longitude) with specified width (meters), length (meters), and orientation (degrees).
+ */
+export function getDevelopmentFootprintPolygonWGS84(latitude, longitude, widthMeters, lengthMeters, orientationDegrees = 0) {
+  if (
+    typeof latitude !== 'number' ||
+    typeof longitude !== 'number' ||
+    Number.isNaN(latitude) ||
+    Number.isNaN(longitude)
+  ) {
+    return [];
+  }
+
+  const centerENU = wgs84ToLocalENU(latitude, longitude);
+  const hw = (widthMeters || 50) / 2.0;
+  const hl = (lengthMeters || 50) / 2.0;
+
+  const localCorners = [
+    { x: -hw, y: hl },   // Top-Left (0)
+    { x: hw, y: hl },    // Top-Right (1)
+    { x: hw, y: -hl },   // Bottom-Right (2)
+    { x: -hw, y: -hl },  // Bottom-Left (3)
+  ];
+
+  return localCorners.map((pt) => {
+    const rot = rotateMetricPoint(pt.x, pt.y, orientationDegrees);
+    const worldENU = { x: centerENU.x + rot.x, y: centerENU.y + rot.y };
+    const wgs = localENUToWgs84(worldENU.x, worldENU.y);
+    return [wgs.longitude, wgs.latitude];
+  });
+}
+
+/**
+ * Geographic 3D Position Picker anchored strictly to terrain ground surface:
+ * 1. viewer.scene.globe.pick(ray, scene)  (Raycast terrain surface)
+ * 2. viewer.camera.pickEllipsoid(windowPosition, ellipsoid) (Ellipsoid fallback)
+ * 3. viewer.scene.pickPosition(windowPosition) (3D Tiles / Scene fallback)
+ *
+ * Temporarily hides candidate preview entities to prevent raycast self-intersection.
+ */
+export function pickGeographicLocation(viewer, clientX, clientY, previewEntities = []) {
   if (!viewer || !viewer.scene) return null;
 
   const canvas = viewer.scene.canvas;
@@ -161,7 +218,12 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
 
   const rect = canvas.getBoundingClientRect();
 
+  // Defensive check: Pointer must be strictly inside canvas bounds
   if (
+    typeof clientX !== 'number' ||
+    typeof clientY !== 'number' ||
+    Number.isNaN(clientX) ||
+    Number.isNaN(clientY) ||
     clientX < rect.left ||
     clientX > rect.right ||
     clientY < rect.top ||
@@ -172,31 +234,44 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
 
   const windowPosition = new Cartesian2(clientX - rect.left, clientY - rect.top);
 
-  let wasPreviewVisible = false;
-  if (previewEntity) {
-    wasPreviewVisible = previewEntity.show;
-    previewEntity.show = false;
-  }
+  // Normalize preview entities to array
+  const entitiesToHide = Array.isArray(previewEntities)
+    ? previewEntities.filter(Boolean)
+    : (previewEntities ? [previewEntities] : []);
+
+  const visibilityStates = new Map();
+  entitiesToHide.forEach((ent) => {
+    visibilityStates.set(ent, ent.show);
+    ent.show = false;
+  });
 
   let cartesian = null;
 
   try {
-    cartesian = viewer.scene.pickPosition(windowPosition);
-
-    if (!cartesian && viewer.scene.globe) {
+    // 1. Raycast against ground terrain surface (primary ground picker)
+    if (viewer.scene.globe && viewer.camera) {
       const ray = viewer.camera.getPickRay(windowPosition);
       if (ray) {
         cartesian = viewer.scene.globe.pick(ray, viewer.scene);
       }
     }
 
-    if (!cartesian && viewer.scene.globe) {
+    // 2. Ellipsoid fallback
+    if (!cartesian && viewer.scene.globe && viewer.camera) {
       cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid);
     }
-  } finally {
-    if (previewEntity) {
-      previewEntity.show = wasPreviewVisible;
+
+    // 3. Scene pickPosition fallback for 3D tilesets when globe pick is unavailable
+    if (!cartesian && viewer.scene.pickPositionSupported) {
+      cartesian = viewer.scene.pickPosition(windowPosition);
     }
+  } catch (e) {
+    cartesian = null;
+  } finally {
+    // Restore entity visibility
+    visibilityStates.forEach((wasVisible, ent) => {
+      ent.show = wasVisible;
+    });
   }
 
   if (!cartesian) return null;

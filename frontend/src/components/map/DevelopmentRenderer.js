@@ -6,6 +6,7 @@ import {
 } from 'cesium';
 
 import { SUPPORTED_DEV_TYPES } from '../../types/development.js';
+import { getBuildingPositionCartesian } from '../../utils/geoUtils.js';
 
 export class DevelopmentRenderer {
   constructor(viewer) {
@@ -37,7 +38,8 @@ export class DevelopmentRenderer {
     const rawHeight = height || buildingHeight || dims.height;
     const bldgHeight = (typeof rawHeight === 'number' && !Number.isNaN(rawHeight) && rawHeight > 0) ? rawHeight : spec.defaultDimensions.height;
 
-    const position = Cartesian3.fromDegrees(lon, lat, bldgHeight / 2);
+    const position = getBuildingPositionCartesian(lon, lat, bldgHeight);
+    if (!position) return null;
 
     const areaSqm = length * width;
     const areaHa = (areaSqm / 10000).toFixed(2);

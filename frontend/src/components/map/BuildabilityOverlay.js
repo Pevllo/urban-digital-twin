@@ -1,11 +1,13 @@
 import { Cartesian3, Color, HeightReference, VerticalOrigin, PolygonHierarchy } from 'cesium';
 import { SUPPORTED_DEV_TYPES } from '../../types/development.js';
 import { getCanonicalSpatialLayers } from '../../utils/buildabilityEngine.js';
+import { getBuildingPositionCartesian, getDevelopmentFootprintPolygonWGS84 } from '../../utils/geoUtils.js';
 
 export class BuildabilityOverlay {
   constructor(viewer) {
     this.viewer = viewer;
     this.previewEntity = null;
+    this.footprintEntity = null;
     this.buildableEntities = [];
     this.isDebugOverlayActive = false;
   }
@@ -15,7 +17,7 @@ export class BuildabilityOverlay {
   }
 
   getPreviewEntity() {
-    return this.previewEntity;
+    return [this.previewEntity, this.footprintEntity].filter(Boolean);
   }
 
   updatePreview(picked, devType) {
@@ -35,11 +37,23 @@ export class BuildabilityOverlay {
 
     const rawHeight = dims.height || dims.buildingHeight;
     const height = (typeof rawHeight === 'number' && !Number.isNaN(rawHeight) && rawHeight > 0) ? rawHeight : spec.defaultDimensions.height;
+    const orientation = dims.orientation || 0;
 
     const isValid = validation.valid;
     const colorHex = isValid ? '#10b981' : '#ef4444';
     const previewColor = Color.fromCssColorString(colorHex).withAlpha(isValid ? 0.85 : 0.65);
-    const heightPos = Cartesian3.fromDegrees(lon, lat, height / 2);
+    const heightPos = getBuildingPositionCartesian(lon, lat, height);
+
+    if (!heightPos) return;
+
+    const footprintWGS84 = dims.footprintWGS84 && dims.footprintWGS84.length === 4
+      ? dims.footprintWGS84
+      : getDevelopmentFootprintPolygonWGS84(lat, lon, width, length, orientation);
+
+    const flatCoords = [];
+    footprintWGS84.forEach((pt) => {
+      flatCoords.push(pt[0], pt[1]); // [lon, lat]
+    });
 
     const areaSqm = length * width;
     const areaHa = (areaSqm / 10000).toFixed(2);
@@ -48,6 +62,7 @@ export class BuildabilityOverlay {
 
     const textLabel = `🏢 PLACEMENT PREVIEW (${devType.toUpperCase()})\nStatus: ${statusTag}\nFootprint: ${length}m × ${width}m × ${height}m (${areaLabel})\nZone ${picked.zone_id || 'unresolved'}`;
 
+    // 1. Render / Update 3D Preview Box Volume
     if (!this.previewEntity) {
       this.previewEntity = this.viewer.entities.add({
         id: 'placement-preview-entity',
@@ -76,7 +91,7 @@ export class BuildabilityOverlay {
         },
       });
 
-      console.log('[ENTITY CREATED: PREVIEW]', {
+      console.log('[ENTITY CREATED: PREVIEW BOX]', {
         id: this.previewEntity.id,
         devId: null,
         properties: { isPreview: true, developmentType: devType },
@@ -97,7 +112,7 @@ export class BuildabilityOverlay {
         this.previewEntity.label.backgroundColor = Color.fromCssColorString(isValid ? '#0f172a' : '#7f1d1d').withAlpha(0.92);
       }
 
-      console.log('[ENTITY MOVED: PREVIEW]', {
+      console.log('[ENTITY MOVED: PREVIEW BOX]', {
         id: this.previewEntity.id,
         devId: null,
         properties: { isPreview: true, developmentType: devType },
@@ -109,12 +124,35 @@ export class BuildabilityOverlay {
       });
     }
 
+    // 2. Render / Update Ground 2D Footprint Polygon Overlay
+    if (flatCoords.length >= 8) {
+      if (!this.footprintEntity) {
+        this.footprintEntity = this.viewer.entities.add({
+          id: 'placement-footprint-entity',
+          properties: { isPreview: true },
+          polygon: {
+            hierarchy: new PolygonHierarchy(Cartesian3.fromDegreesArray(flatCoords)),
+            material: Color.fromCssColorString(isValid ? '#10b981' : '#ef4444').withAlpha(0.40),
+            outline: true,
+            outlineColor: Color.fromCssColorString(isValid ? '#34d399' : '#f87171'),
+            heightReference: HeightReference.CLAMP_TO_GROUND,
+          },
+        });
+      } else {
+        if (this.footprintEntity.polygon) {
+          this.footprintEntity.polygon.hierarchy = new PolygonHierarchy(Cartesian3.fromDegreesArray(flatCoords));
+          this.footprintEntity.polygon.material = Color.fromCssColorString(isValid ? '#10b981' : '#ef4444').withAlpha(0.40);
+          this.footprintEntity.polygon.outlineColor = Color.fromCssColorString(isValid ? '#34d399' : '#f87171');
+        }
+      }
+    }
+
     this.viewer.scene.requestRender();
   }
 
   clearPreview() {
     if (this.previewEntity && this.viewer) {
-      console.log('[ENTITY REMOVED: PREVIEW]', {
+      console.log('[ENTITY REMOVED: PREVIEW BOX]', {
         id: this.previewEntity.id,
         devId: null,
         properties: { isPreview: true },
@@ -125,6 +163,11 @@ export class BuildabilityOverlay {
       this.viewer.entities.remove(this.previewEntity);
     }
     this.previewEntity = null;
+
+    if (this.footprintEntity && this.viewer) {
+      this.viewer.entities.remove(this.footprintEntity);
+    }
+    this.footprintEntity = null;
   }
 
   toggleBuildableDebugOverlay(forceState = null) {

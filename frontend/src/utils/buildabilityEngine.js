@@ -10,7 +10,10 @@ import {
   polygonToSegmentDistance,
   isPolygonInsidePolygon,
   isPointInPolygon,
+  getDevelopmentFootprintPolygonWGS84,
 } from './geoUtils.js';
+
+export { getDevelopmentFootprintPolygonWGS84 };
 import { createDevelopmentModel, SUPPORTED_DEV_TYPES } from '../types/development.js';
 
 /**
@@ -272,8 +275,17 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
   const bldgHeight = model.buildingHeight || model.height || 15;
   const orientation = model.orientation || 0;
 
+  const footprintWGS84 = getDevelopmentFootprintPolygonWGS84(lat, lon, dims.width, dims.length, orientation);
+
   const resultCoords = { longitude: lon, latitude: lat, terrainHeight: model.z || 0.0 };
-  const resultDims = { width: dims.width, length: dims.length, height: bldgHeight, buildingHeight: bldgHeight, orientation };
+  const resultDims = {
+    width: dims.width,
+    length: dims.length,
+    height: bldgHeight,
+    buildingHeight: bldgHeight,
+    orientation,
+    footprintWGS84,
+  };
   const allowedTypes = Object.keys(SUPPORTED_DEV_TYPES);
 
   const { buildingFootprints, roadNetwork, studyAreaPolygon, extent } = getCanonicalSpatialLayers(spatialData);
