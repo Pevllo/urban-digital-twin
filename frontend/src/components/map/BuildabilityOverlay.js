@@ -51,8 +51,10 @@ export class BuildabilityOverlay {
 
     // Render ONLY ONE 3D Translucent Wireframe Preview Volume (No floating Cesium label, no duplicate box)
     if (!this.previewEntity) {
+      const countBefore = this.viewer.entities.values.length;
       this.previewEntity = this.viewer.entities.add({
         id: 'placement-preview-entity',
+        show: true,
         position: Cartesian3.clone(heightPos),
         properties: {
           isPreview: true,
@@ -66,33 +68,34 @@ export class BuildabilityOverlay {
           heightReference: HeightReference.NONE,
         },
       });
+      const countAfter = this.viewer.entities.values.length;
 
-      console.log('[ENTITY CREATED: PREVIEW VOLUME]', {
-        id: this.previewEntity.id,
-        devId: null,
-        properties: { isPreview: true, developmentType: devType },
+      console.log('[PREVIEW CREATE]', {
         type: devType,
-        isPreview: true,
-        position: { lat, lon, height },
+        entityId: this.previewEntity.id,
+        show: this.previewEntity.show,
+        hasBox: !!this.previewEntity.box,
+        dimensions: { length, width, height },
+        position: { lat, lon, heightPos },
+        entitiesCount: { before: countBefore, after: countAfter },
       });
     } else {
       const oldPos = this.previewEntity.position ? this.previewEntity.position.getValue(this.viewer.clock.currentTime) : null;
+      this.previewEntity.show = true;
       this.previewEntity.position = Cartesian3.clone(heightPos);
       if (this.previewEntity.box) {
         this.previewEntity.box.dimensions = new Cartesian3(length, width, height);
         this.previewEntity.box.material = previewColor;
         this.previewEntity.box.outlineColor = outlineColor;
+        this.previewEntity.box.heightReference = HeightReference.NONE;
       }
 
-      console.log('[ENTITY MOVED: PREVIEW VOLUME]', {
+      console.log('[PREVIEW UPDATE]', {
         id: this.previewEntity.id,
-        devId: null,
-        properties: { isPreview: true, developmentType: devType },
+        show: this.previewEntity.show,
         type: devType,
-        isPreview: true,
         oldPosition: oldPos,
         newPosition: heightPos,
-        caller: 'BuildabilityOverlay.updatePreview',
       });
     }
 

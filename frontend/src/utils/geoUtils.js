@@ -243,7 +243,8 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntities
 
   const visibilityStates = new Map();
   entitiesToHide.forEach((ent) => {
-    visibilityStates.set(ent, ent.show);
+    const isVisible = ent.show !== false;
+    visibilityStates.set(ent, isVisible);
     ent.show = false;
   });
 
@@ -270,9 +271,9 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntities
   } catch (e) {
     cartesian = null;
   } finally {
-    // Restore entity visibility
+    // Restore entity visibility safely with explicit boolean true
     visibilityStates.forEach((wasVisible, ent) => {
-      ent.show = wasVisible;
+      ent.show = Boolean(wasVisible);
     });
   }
 

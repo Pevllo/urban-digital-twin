@@ -275,6 +275,12 @@ export function createPlacementController(viewer, options = {}) {
           dist,
         });
 
+        console.log('[DRAG PREVIEW START]', {
+          type: activePlacementType,
+          hasOverlay: !!buildabilityOverlay,
+          hasViewer: !!viewer,
+        });
+
         if (placementBanner) placementBanner.classList.remove('hidden');
         if (bannerText) {
           bannerText.textContent = `📍 DRAGGING ${dragCandidateSpec ? dragCandidateSpec.label.toUpperCase() : activePlacementType.toUpperCase()} — Drop on 3D map`;
@@ -291,6 +297,11 @@ export function createPlacementController(viewer, options = {}) {
       return;
     }
 
+    if (!buildabilityOverlay) {
+      console.warn('[PLACEMENT PREVIEW ERROR]: buildabilityOverlay is null or uninitialized.');
+      return;
+    }
+
     const picked = pickGeographicLocation(
       viewer,
       e.clientX,
@@ -299,6 +310,12 @@ export function createPlacementController(viewer, options = {}) {
     );
 
     if (picked) {
+      console.log('[PREVIEW POSITION]', {
+        latitude: picked.latitude,
+        longitude: picked.longitude,
+        cartesian: picked.cartesian,
+      });
+
       const existingDevs = devStore
         .getAllDevelopments()
         .filter((d) => d.id !== movingDevId && d.development_id !== movingDevId);
