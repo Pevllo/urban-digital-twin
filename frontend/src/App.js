@@ -11,6 +11,7 @@ import { createPlacementController } from './hooks/usePlacement.js';
 import { runWhatIfSimulation } from './services/api/simulationApi.js';
 import { validateBuildability } from './utils/buildabilityEngine.js';
 import { createDevelopmentModel } from './types/development.js';
+import { haversineDistanceMeters } from './utils/geoUtils.js';
 
 /**
  * Dynamic City / Study Area Configuration
@@ -259,8 +260,14 @@ export function initializeApp() {
   });
 
   function handleConfirmProperties() {
+    console.log('[CONFIRM CLICK]', {
+      pendingPlacementLocation: placementController ? placementController.getPendingLocation() : null,
+      editingDevId,
+    });
+
     const pending = placementController ? placementController.getPendingLocation() : null;
     if (!pending && !editingDevId) {
+      console.warn('[CONFIRM ABORTED]: Neither pending placement nor editingDevId found.');
       propertiesModal.classList.add('hidden');
       return;
     }
@@ -274,13 +281,13 @@ export function initializeApp() {
     const targetTerrainHeight = pending ? (typeof pending.terrainHeight === 'number' ? pending.terrainHeight : 0) : (existingRecord ? (existingRecord.terrainHeight || 0) : 0);
     const config = SUPPORTED_DEV_TYPES[devType];
 
-    let nameVal = devNameInput.value ? devNameInput.value.trim() : '';
+    let nameVal = devNameInput ? devNameInput.value.trim() : '';
     if (!nameVal) {
       nameVal = pending ? `${config.label} ${targetDevId}` : `Proposed ${config.label}`;
     }
 
-    const simHour = parseInt(simulationHourSelect.value || '8', 10);
-    const inputs = dynamicFieldsContainer.querySelectorAll('.form-input');
+    const simHour = parseInt((simulationHourSelect ? simulationHourSelect.value : '8') || '8', 10);
+    const inputs = dynamicFieldsContainer ? dynamicFieldsContainer.querySelectorAll('.form-input') : [];
     const properties = {};
 
     inputs.forEach((inp) => {
@@ -289,65 +296,81 @@ export function initializeApp() {
       properties[key] = Number.isNaN(numVal) ? (config.propertyFields.find(f => f.key === key)?.default || 0) : numVal;
     });
 
+    console.log('[CONFIRM INPUT]', {
+      type: devType,
+      latitude: targetLat,
+      longitude: targetLon,
+      terrainHeight: targetTerrainHeight,
+      zone_id: targetZoneId,
+      name: nameVal,
+      properties,
+    });
+
     const propValidation = devStore.validateProperties(devType, properties);
     if (!propValidation.valid) {
-      formErrorAlert.textContent = propValidation.error;
-      formErrorAlert.classList.remove('hidden');
+      console.warn('[CONFIRM FORM REJECTED]:', propValidation.error);
+      if (formErrorAlert) {
+        formErrorAlert.textContent = propValidation.error;
+        formErrorAlert.classList.remove('hidden');
+      }
       return;
     }
 
-    console.log('[FINAL MODEL INPUT]', {
-      latitude: targetLat,
-      longitude: targetLon,
-      terrainHeight: targetTerrainHeight,
-      zone_id: targetZoneId,
-      id: targetDevId,
-    });
-
-    // Perform final buildability re-validation against LOCKED coordinates
-    const existingDevs = devStore.getAllDevelopments().filter(d => d.id !== targetDevId && d.development_id !== targetDevId);
-    const finalModel = createDevelopmentModel({
-      id: targetDevId,
-      development_id: targetDevId,
-      development_type: devType,
-      name: nameVal,
-      latitude: targetLat,
-      longitude: targetLon,
-      terrainHeight: targetTerrainHeight,
-      zone_id: targetZoneId,
-      properties,
-      simulation_hour: simHour,
-    });
+    let finalModel;
+    try {
+      finalModel = createDevelopmentModel({
+        id: targetDevId,
+        development_id: targetDevId,
+        development_type: devType,
+        name: nameVal,
+        latitude: targetLat,
+        longitude: targetLon,
+        terrainHeight: targetTerrainHeight,
+        zone_id: targetZoneId,
+        properties,
+        simulation_hour: simHour,
+      });
+    } catch (err) {
+      console.error('[CONFIRM MODEL ERROR]', err);
+      if (formErrorAlert) {
+        formErrorAlert.textContent = `Model Creation Error: ${err.message}`;
+        formErrorAlert.classList.remove('hidden');
+      }
+      return;
+    }
 
     if (pending && pending.isNew) {
       const distErrorMeters = haversineDistanceMeters(pending.latitude, pending.longitude, finalModel.latitude, finalModel.longitude);
       console.log('[PLACEMENT LOCK]', {
-        mouseClientX: pending.clientX || null,
-        mouseClientY: pending.clientY || null,
         pickedLatitude: pending.latitude,
         pickedLongitude: pending.longitude,
-        pickedTerrainHeight: pending.terrainHeight,
-        pendingLatitude: pending.latitude,
-        pendingLongitude: pending.longitude,
         finalLatitude: finalModel.latitude,
         finalLongitude: finalModel.longitude,
-        renderedLatitude: finalModel.latitude,
-        renderedLongitude: finalModel.longitude,
         distErrorMeters,
       });
 
       if (distErrorMeters > 1.0) {
-        throw new Error(`PLACEMENT DISTANCE EXCEEDED LIMIT: ${distErrorMeters.toFixed(3)} meters`);
+        const err = new Error(`PLACEMENT DISTANCE EXCEEDED LIMIT: ${distErrorMeters.toFixed(3)} meters`);
+        console.error('[CONFIRM COORDINATE ERROR]', err);
+        if (formErrorAlert) {
+          formErrorAlert.textContent = err.message;
+          formErrorAlert.classList.remove('hidden');
+        }
+        return;
       }
     }
 
     console.log('[FINAL MODEL]', {
+      id: finalModel.id,
+      development_type: finalModel.development_type,
       latitude: finalModel.latitude,
       longitude: finalModel.longitude,
+      terrainHeight: finalModel.terrainHeight,
       zone_id: finalModel.zone_id,
-      id: finalModel.id,
+      footprint: finalModel.footprint,
     });
 
+    const existingDevs = devStore.getAllDevelopments().filter(d => d.id !== targetDevId && d.development_id !== targetDevId);
     const finalBuildability = validateBuildability(
       finalModel.latitude,
       finalModel.longitude,
@@ -358,53 +381,71 @@ export function initializeApp() {
     );
 
     if (!finalBuildability.valid) {
-      formErrorAlert.textContent = `Cannot confirm placement: Building footprint overlaps an existing ${finalBuildability.reason || finalBuildability.conflictType}.`;
-      formErrorAlert.classList.remove('hidden');
+      const msg = `Cannot confirm placement: Building footprint overlaps an existing ${finalBuildability.reason || finalBuildability.conflictType}.`;
+      console.warn('[CONFIRM BUILDABILITY REJECTED]:', msg);
+      if (formErrorAlert) {
+        formErrorAlert.textContent = msg;
+        formErrorAlert.classList.remove('hidden');
+      }
       return;
     }
 
+    const existsBeforeAdd = !!devStore.getDevelopment(targetDevId);
+    console.log('[ID CHECK]', { id: targetDevId, existsBeforeAdd });
+
     let record;
-    if (pending && pending.isNew) {
-      record = devStore.addDevelopment(finalModel);
-    } else if (editingDevId) {
-      record = devStore.updateDevelopment(editingDevId, finalModel);
+    try {
+      if (pending && pending.isNew) {
+        record = devStore.addDevelopment(finalModel);
+      } else if (editingDevId) {
+        record = devStore.updateDevelopment(editingDevId, finalModel);
+      }
+    } catch (err) {
+      console.error('[STORE ADD ERROR]', err);
+      if (formErrorAlert) {
+        formErrorAlert.textContent = `Store Error: ${err.message}`;
+        formErrorAlert.classList.remove('hidden');
+      }
+      return;
     }
 
-    if (record) {
-      console.log('[STORE AFTER ADD]', {
-        latitude: record.latitude,
-        longitude: record.longitude,
-        zone_id: record.zone_id,
-        id: record.id,
-      });
+    const stored = devStore.getDevelopment(finalModel.id);
+    console.log('[STORE VERIFY]', stored);
 
-      developmentRenderer.renderDevelopment(record);
-      scenarioState.setSelectedDevForSim(record.id);
-      refreshDevList();
-      updateStatus(`Confirmed ${record.name} in Zone ${record.zone_id || CITY_CONFIG.referenceZoneId}`, true);
+    if (!stored) {
+      const err = new Error(`STORE CORRUPTION: ${finalModel.id} not found in devStore after commit.`);
+      console.error('[STORE VERIFY ERROR]', err);
+      if (formErrorAlert) {
+        formErrorAlert.textContent = err.message;
+        formErrorAlert.classList.remove('hidden');
+      }
+      return;
     }
 
-    propertiesModal.classList.add('hidden');
-    editingDevId = null;
+    console.log('[STORE NOTIFY]', { devCount: devStore.getAllDevelopments().length });
+
+    // 1. Render permanent entity
+    developmentRenderer.syncAll(devStore.getAllDevelopments());
+
+    const permanentEntity = viewer ? viewer.entities.getById(`development-${finalModel.id}`) : null;
+    console.log('[PERMANENT ENTITY]', {
+      id: `development-${finalModel.id}`,
+      exists: !!permanentEntity,
+      show: permanentEntity ? permanentEntity.show : false,
+      position: permanentEntity && permanentEntity.position ? permanentEntity.position.getValue(viewer.clock.currentTime) : null,
+    });
+
+    scenarioState.setSelectedDevForSim(record.id);
+    refreshDevList();
+    updateStatus(`Confirmed ${record.name} in Zone ${record.zone_id || CITY_CONFIG.referenceZoneId}`, true);
+
+    // 2. Clear preview and placement state ONLY after successful commit & rendering
+    if (buildabilityOverlay) buildabilityOverlay.clearPreview();
     if (placementController) placementController.cancelPlacementMode();
 
-    const previewEntity = buildabilityOverlay ? buildabilityOverlay.getPreviewEntity() : null;
-    const permanentEntity = developmentRenderer ? developmentRenderer.entitiesMap.get(targetDevId) : null;
-
-    console.log('[PLACEMENT AFTER CONFIRM]', {
-      state: placementController ? placementController.getState() : null,
-      activePlacementType: placementController ? placementController.getActiveType() : null,
-      pendingPlacementLocation: placementController ? placementController.getPendingLocation() : null,
-      movingDevId: placementController ? placementController.getMovingDevId() : null,
-      previewEntity: previewEntity ? { id: previewEntity.id } : null,
-      permanentEntity: permanentEntity ? { id: permanentEntity.id } : null,
-    });
-
-    console.log('[PLACEMENT ENTITY CHECK]', {
-      previewEntity: previewEntity ? { id: previewEntity.id } : null,
-      permanentEntity: permanentEntity ? { id: permanentEntity.id } : null,
-      sameObject: previewEntity === permanentEntity,
-    });
+    // 3. Hide Modal Window
+    if (propertiesModal) propertiesModal.classList.add('hidden');
+    editingDevId = null;
   }
 
   function refreshDevList() {
@@ -718,9 +759,19 @@ export function initializeApp() {
     if (modalClose) modalClose.addEventListener('click', closeModal);
     if (btnCancelProperties) btnCancelProperties.addEventListener('click', closeModal);
 
+    let isSubmittingConfirm = false;
     const triggerSubmit = (e) => {
-      if (e) e.preventDefault();
-      handleConfirmProperties();
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      if (isSubmittingConfirm) return;
+      isSubmittingConfirm = true;
+      try {
+        handleConfirmProperties();
+      } finally {
+        isSubmittingConfirm = false;
+      }
     };
 
     if (propertiesForm) propertiesForm.addEventListener('submit', triggerSubmit);
