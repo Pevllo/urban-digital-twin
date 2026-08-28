@@ -136,6 +136,7 @@ export function createDevelopmentModel(raw) {
     floors = Math.max(4, Math.round(height / 3.5));
   }
 
+  const area = width * length;
   const id = raw.id || raw.development_id || 'DEV-000';
 
   const lat = Number(raw.latitude);

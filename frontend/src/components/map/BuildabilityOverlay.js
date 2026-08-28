@@ -1,4 +1,4 @@
-import { Cartesian3, Color, HeightReference, VerticalOrigin, PolygonHierarchy, Cartographic, Math as CesiumMath } from 'cesium';
+import { Cartesian3, Color, HeightReference, VerticalOrigin, PolygonHierarchy, Cartographic, Math as CesiumMath, SceneTransforms } from 'cesium';
 import { SUPPORTED_DEV_TYPES } from '../../types/development.js';
 import { getCanonicalSpatialLayers } from '../../utils/buildabilityEngine.js';
 import { getBuildingPositionCartesian, getDevelopmentFootprintPolygonWGS84 } from '../../utils/geoUtils.js';
@@ -9,6 +9,20 @@ export class BuildabilityOverlay {
     this.previewEntity = null;
     this.buildableEntities = [];
     this.isDebugOverlayActive = false;
+
+    if (this.viewer && this.viewer.entities && this.viewer.entities.collectionChanged) {
+      this.viewer.entities.collectionChanged.addEventListener((collection, added, removed, changed) => {
+        if (
+          (added && added.some(e => e.id === 'placement-preview-entity')) ||
+          (removed && removed.some(e => e.id === 'placement-preview-entity'))
+        ) {
+          console.log('[PREVIEW ENTITY LIFECYCLE]', {
+            added: added ? added.map(e => e.id) : [],
+            removed: removed ? removed.map(e => e.id) : [],
+          });
+        }
+      });
+    }
   }
 
   setViewer(viewer) {
@@ -111,6 +125,11 @@ export class BuildabilityOverlay {
 
     // Log Cartographic position verification
     const carto = Cartographic.fromCartesian(this.previewEntity.position.getValue(this.viewer.clock.currentTime));
+    const screenPos = SceneTransforms.worldToWindowCoordinates(
+      this.viewer.scene,
+      this.previewEntity.position.getValue(this.viewer.clock.currentTime)
+    );
+
     console.log('[PREVIEW VERIFIED POSITION]', {
       id: this.previewEntity.id,
       show: this.previewEntity.show,
@@ -123,6 +142,8 @@ export class BuildabilityOverlay {
       renderedLat: CesiumMath.toDegrees(carto.latitude),
       renderedCenterHeight: carto.height,
       expectedCenterHeight: terrainHeight + (height / 2.0),
+      screenPos,
+      isSameViewer: this.viewer === window.cesiumViewer,
     });
 
     const previewCount = this.viewer.entities.values.filter(e => e.id === 'placement-preview-entity').length;
