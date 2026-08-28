@@ -47,24 +47,39 @@ export class DevelopmentRenderer {
 
     if (this.entitiesMap.has(devId)) {
       const entity = this.entitiesMap.get(devId);
-      entity.position = position;
+      const oldPos = entity.position ? entity.position.getValue(this.viewer.clock.currentTime) : null;
+      entity.position = Cartesian3.clone(position);
       if (entity.box) {
         entity.box.dimensions = new Cartesian3(length, width, bldgHeight);
       }
       if (entity.label) {
         entity.label.text = labelText;
       }
+
+      console.log('[ENTITY MOVED: PERMANENT]', {
+        id: entity.id,
+        devId,
+        properties: { developmentId: devId, developmentType: devType, zoneId: zone_id, isPreview: false },
+        type: devType,
+        isPreview: false,
+        oldPosition: oldPos,
+        newPosition: position,
+        caller: 'DevelopmentRenderer.renderDevelopment',
+      });
+
       this.viewer.scene.requestRender();
       return entity;
     }
 
     const entity = this.viewer.entities.add({
-      position,
+      id: `development-${devId}`,
+      position: Cartesian3.clone(position),
       devId,
       properties: {
         developmentId: devId,
         developmentType: devType,
         zoneId: zone_id,
+        isPreview: false,
       },
       box: {
         dimensions: new Cartesian3(length, width, bldgHeight),
@@ -86,6 +101,15 @@ export class DevelopmentRenderer {
       },
     });
 
+    console.log('[ENTITY CREATED: PERMANENT]', {
+      id: entity.id,
+      devId,
+      properties: { developmentId: devId, developmentType: devType, zoneId: zone_id, isPreview: false },
+      type: devType,
+      isPreview: false,
+      position: { lat, lon, height: bldgHeight },
+    });
+
     this.entitiesMap.set(devId, entity);
     this.viewer.scene.requestRender();
     return entity;
@@ -94,6 +118,14 @@ export class DevelopmentRenderer {
   removeDevelopment(devId) {
     if (this.entitiesMap.has(devId) && this.viewer) {
       const entity = this.entitiesMap.get(devId);
+      console.log('[ENTITY REMOVED: PERMANENT]', {
+        id: entity.id,
+        devId,
+        properties: { developmentId: devId, isPreview: false },
+        type: 'permanent',
+        isPreview: false,
+      });
+
       this.viewer.entities.remove(entity);
       this.entitiesMap.delete(devId);
       this.viewer.scene.requestRender();

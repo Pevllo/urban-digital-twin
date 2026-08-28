@@ -216,3 +216,124 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntity =
     cartesian,
   };
 }
+
+/**
+ * Checks if two 2D line segments (p1->p2) and (p3->p4) intersect.
+ */
+export function doLineSegmentsIntersect(p1, p2, p3, p4) {
+  function ccw(A, B, C) {
+    return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+  }
+  return (
+    ccw(p1, p3, p4) !== ccw(p2, p3, p4) &&
+    ccw(p1, p2, p3) !== ccw(p1, p2, p4)
+  );
+}
+
+/**
+ * Tests if a 2D point {x, y} lies strictly inside a polygon [{x, y}, ...].
+ * Ray-casting algorithm.
+ */
+export function isPointInPolygon(pt, polygon) {
+  if (!Array.isArray(polygon) || polygon.length < 3) return false;
+  let inside = false;
+  const numPts = polygon.length;
+  for (let i = 0, j = numPts - 1; i < numPts; j = i++) {
+    const xi = polygon[i].x, yi = polygon[i].y;
+    const xj = polygon[j].x, yj = polygon[j].y;
+
+    const intersect =
+      yi > pt.y !== yj > pt.y &&
+      pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Computes area in m² of a 2D polygon [{x, y}, ...].
+ */
+export function computePolygonArea(polygon) {
+  if (!Array.isArray(polygon) || polygon.length < 3) return 0.0;
+  const n = polygon.length;
+  let area = 0.0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += polygon[i].x * polygon[j].y - polygon[j].x * polygon[i].y;
+  }
+  return Math.abs(area) / 2.0;
+}
+
+/**
+ * Checks if two 2D polygons intersect (edge cross OR containment).
+ */
+export function doPolygonsIntersect(polyA, polyB) {
+  if (!Array.isArray(polyA) || !Array.isArray(polyB) || polyA.length < 3 || polyB.length < 3) return false;
+
+  // 1. Edge-edge intersection test
+  for (let i = 0; i < polyA.length; i++) {
+    const a1 = polyA[i];
+    const a2 = polyA[(i + 1) % polyA.length];
+    for (let j = 0; j < polyB.length; j++) {
+      const b1 = polyB[j];
+      const b2 = polyB[(j + 1) % polyB.length];
+      if (doLineSegmentsIntersect(a1, a2, b1, b2)) {
+        return true;
+      }
+    }
+  }
+
+  // 2. PolyA inside PolyB test
+  if (isPointInPolygon(polyA[0], polyB)) return true;
+
+  // 3. PolyB inside PolyA test
+  if (isPointInPolygon(polyB[0], polyA)) return true;
+
+  return false;
+}
+
+/**
+ * Minimum distance between a 2D polygon and a 2D line segment (ax, ay -> bx, by).
+ */
+export function polygonToSegmentDistance(polyPoints, ax, ay, bx, by) {
+  let minDistance = Infinity;
+
+  for (const pt of polyPoints) {
+    const d = metricPointToSegmentDistance(pt.x, pt.y, ax, ay, bx, by);
+    if (d < minDistance) minDistance = d;
+  }
+
+  for (let i = 0; i < polyPoints.length; i++) {
+    const p1 = polyPoints[i];
+    const p2 = polyPoints[(i + 1) % polyPoints.length];
+
+    const midX = (p1.x + p2.x) / 2.0;
+    const midY = (p1.y + p2.y) / 2.0;
+    const dMid = metricPointToSegmentDistance(midX, midY, ax, ay, bx, by);
+    if (dMid < minDistance) minDistance = dMid;
+  }
+
+  return minDistance;
+}
+
+/**
+ * Tests if innerPoly lies ENTIRELY inside outerPoly (all vertices inside + no edge intersections).
+ */
+export function isPolygonInsidePolygon(innerPoly, outerPoly) {
+  if (!Array.isArray(innerPoly) || !Array.isArray(outerPoly)) return false;
+  for (const pt of innerPoly) {
+    if (!isPointInPolygon(pt, outerPoly)) return false;
+  }
+
+  for (let i = 0; i < innerPoly.length; i++) {
+    const i1 = innerPoly[i];
+    const i2 = innerPoly[(i + 1) % innerPoly.length];
+    for (let j = 0; j < outerPoly.length; j++) {
+      const o1 = outerPoly[j];
+      const o2 = outerPoly[(j + 1) % outerPoly.length];
+      if (doLineSegmentsIntersect(i1, i2, o1, o2)) return false;
+    }
+  }
+
+  return true;
+}

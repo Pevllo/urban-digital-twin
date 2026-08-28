@@ -43,11 +43,13 @@ export function initializeApp() {
   const menuToggleSidebar = document.getElementById('menu-toggle-sidebar');
   const menuResetCamera = document.getElementById('menu-reset-camera');
   const menuToggleDebug = document.getElementById('menu-toggle-debug');
+  const menuToggleBuildable = document.getElementById('menu-toggle-buildable');
   const menuAbout = document.getElementById('menu-about');
 
   // DOM Elements — Sidebar & Panels
   const sidebar = document.getElementById('sidebar-dashboard');
   const sidebarToggle = document.getElementById('sidebar-toggle');
+  const btnRestoreSidebar = document.getElementById('btn-restore-sidebar');
   const sidebarPanelTitle = document.getElementById('sidebar-panel-title');
   const studyAreaTitle = document.getElementById('study-area-title');
   const studyAreaZone = document.getElementById('study-area-zone');
@@ -115,6 +117,22 @@ export function initializeApp() {
     }
   }
 
+  function setSidebarCollapsed(collapsed) {
+    if (!sidebar) return;
+    sidebar.classList.toggle('collapsed', collapsed);
+    if (btnRestoreSidebar) {
+      btnRestoreSidebar.classList.toggle('hidden', !collapsed);
+    }
+    if (menuToggleSidebar) {
+      menuToggleSidebar.innerHTML = collapsed
+        ? '<span class="item-icon">📐</span> Open Sidebar'
+        : '<span class="item-icon">📐</span> Collapse Sidebar';
+    }
+    if (viewer) {
+      setTimeout(() => viewer.resize(), 250);
+    }
+  }
+
   function switchView(viewName) {
     currentView = viewName;
 
@@ -156,13 +174,7 @@ export function initializeApp() {
     if (sidebarPanelTitle) sidebarPanelTitle.textContent = panelTitles[viewName] || 'Digital Twin';
 
     // 3. Ensure Sidebar is expanded when interacting with views
-    if (sidebar) {
-      sidebar.classList.remove('collapsed');
-    }
-
-    if (viewer) {
-      setTimeout(() => viewer.resize(), 200);
-    }
+    setSidebarCollapsed(false);
   }
 
   function updateSimSelectDropdown() {
@@ -239,6 +251,12 @@ export function initializeApp() {
     }
     editingDevId = null;
   }
+
+  console.log('URBAN TWIN BUILD:', {
+    branch: 'main',
+    commit: '973b69f76bbd7cf5e4dcfd8c59263a1fc233f3ee',
+    timestamp: new Date().toISOString(),
+  });
 
   function handleConfirmProperties() {
     const pending = placementController ? placementController.getPendingLocation() : null;
@@ -323,6 +341,24 @@ export function initializeApp() {
     propertiesModal.classList.add('hidden');
     editingDevId = null;
     if (placementController) placementController.cancelPlacementMode();
+
+    const previewEntity = buildabilityOverlay ? buildabilityOverlay.getPreviewEntity() : null;
+    const permanentEntity = developmentRenderer ? developmentRenderer.entitiesMap.get(targetDevId) : null;
+
+    console.log('[PLACEMENT AFTER CONFIRM]', {
+      state: placementController ? placementController.getState() : null,
+      activePlacementType: placementController ? placementController.getActiveType() : null,
+      pendingPlacementLocation: placementController ? placementController.getPendingLocation() : null,
+      movingDevId: placementController ? placementController.getMovingDevId() : null,
+      previewEntity: previewEntity ? { id: previewEntity.id } : null,
+      permanentEntity: permanentEntity ? { id: permanentEntity.id } : null,
+    });
+
+    console.log('[PLACEMENT ENTITY CHECK]', {
+      previewEntity: previewEntity ? { id: previewEntity.id } : null,
+      permanentEntity: permanentEntity ? { id: permanentEntity.id } : null,
+      sameObject: previewEntity === permanentEntity,
+    });
   }
 
   function refreshDevList() {
@@ -469,8 +505,8 @@ export function initializeApp() {
 
     if (menuToggleSidebar) {
       menuToggleSidebar.addEventListener('click', () => {
-        if (sidebar) sidebar.classList.toggle('collapsed');
-        setTimeout(() => viewer.resize(), 200);
+        const isCollapsed = sidebar ? sidebar.classList.contains('collapsed') : false;
+        setSidebarCollapsed(!isCollapsed);
       });
     }
 
@@ -490,6 +526,18 @@ export function initializeApp() {
       menuToggleDebug.addEventListener('click', () => {
         if (debugElements.panel) {
           debugElements.panel.classList.toggle('hidden');
+        }
+      });
+    }
+
+    if (menuToggleBuildable) {
+      menuToggleBuildable.addEventListener('click', () => {
+        if (buildabilityOverlay) {
+          const isActive = buildabilityOverlay.toggleBuildableDebugOverlay();
+          menuToggleBuildable.innerHTML = isActive
+            ? '<span class="item-icon">🟩</span> Hide Buildable Areas'
+            : '<span class="item-icon">🟩</span> Show Buildable Areas';
+          updateStatus(isActive ? 'Visual Buildable Areas & Building Footprints Overlay Enabled' : 'Buildable Overlay Disabled');
         }
       });
     }
@@ -558,8 +606,13 @@ export function initializeApp() {
     });
 
     window.addEventListener('pointerup', (e) => {
-      if (placementBanner) placementBanner.classList.add('hidden');
-      if (placementController) placementController.handlePointerUp(e);
+      if (placementController) {
+        placementController.handlePointerUp(e);
+        const state = placementController.getState();
+        if (state === 'IDLE' && placementBanner) {
+          placementBanner.classList.add('hidden');
+        }
+      }
     });
 
     window.addEventListener('keydown', (e) => {
@@ -573,8 +626,13 @@ export function initializeApp() {
 
     if (sidebarToggle) {
       sidebarToggle.addEventListener('click', () => {
-        if (sidebar) sidebar.classList.toggle('collapsed');
-        setTimeout(() => viewer.resize(), 250);
+        setSidebarCollapsed(true);
+      });
+    }
+
+    if (btnRestoreSidebar) {
+      btnRestoreSidebar.addEventListener('click', () => {
+        setSidebarCollapsed(false);
       });
     }
 

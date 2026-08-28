@@ -5,6 +5,11 @@ import {
   rotateMetricPoint,
   metricPointToSegmentDistance,
   haversineDistanceMeters,
+  computePolygonArea,
+  doPolygonsIntersect,
+  polygonToSegmentDistance,
+  isPolygonInsidePolygon,
+  isPointInPolygon,
 } from './geoUtils.js';
 import { createDevelopmentModel, SUPPORTED_DEV_TYPES } from '../types/development.js';
 
@@ -34,12 +39,102 @@ export const ROAD_CLEARANCE_METERS = 5.0;
 export const BUILDING_CLEARANCE_METERS = 5.0;
 export const DEVELOPMENT_CLEARANCE_METERS = 5.0;
 
+let cachedCanonicalLayers = null;
+
+/**
+ * Canonical Spatial Layer Store & Pre-Computation Cache.
+ * Normalizes all spatial features into Local ENU Metric 2D Polygons with bounding boxes (AABBs).
+ */
+export function getCanonicalSpatialLayers(spatialDataset = spatialData) {
+  if (cachedCanonicalLayers && spatialDataset === spatialData) {
+    return cachedCanonicalLayers;
+  }
+
+  const rawBuildings = spatialDataset?.buildings || [];
+  const rawRoads = spatialDataset?.roads || [];
+
+  // 1. Canonical Building Footprint Layer
+  const buildingFootprints = [];
+  let totalBuildingAreaM2 = 0.0;
+
+  for (const bldg of rawBuildings) {
+    const coords = bldg.coordinates || [];
+    if (!Array.isArray(coords) || coords.length < 3) continue;
+
+    const enuPoints = coords.map((c) => wgs84ToLocalENU(c[0], c[1]));
+    const aabb = getMetricAABB(enuPoints, 0.0);
+    const area = computePolygonArea(enuPoints);
+    totalBuildingAreaM2 += area;
+
+    buildingFootprints.push({
+      id: bldg.id,
+      building: bldg.building || 'building',
+      name: bldg.name || '',
+      wgs84Coords: coords,
+      enuPoints,
+      aabb,
+      area,
+    });
+  }
+
+  // 2. Canonical Road Network Layer
+  const roadNetwork = [];
+  for (const r of rawRoads) {
+    const coords = r.coordinates || r;
+    if (!Array.isArray(coords) || coords.length < 2) continue;
+
+    const hwType = r.highway || 'default';
+    const roadWidth = ROAD_WIDTH_BY_TYPE[hwType] || ROAD_WIDTH_BY_TYPE.default;
+    const clearanceThreshold = (roadWidth / 2.0) + ROAD_CLEARANCE_METERS;
+
+    const enuPoints = coords.map((pt) => {
+      const rLat = Array.isArray(pt) ? pt[0] : pt.latitude;
+      const rLon = Array.isArray(pt) ? pt[1] : pt.longitude;
+      return wgs84ToLocalENU(rLat, rLon);
+    });
+
+    const aabb = getMetricAABB(enuPoints, clearanceThreshold);
+
+    roadNetwork.push({
+      id: r.id,
+      highway: hwType,
+      name: r.name || '',
+      roadWidth,
+      clearanceThreshold,
+      wgs84Coords: coords,
+      enuPoints,
+      aabb,
+    });
+  }
+
+  // 3. Study Area Boundary Polygon
+  const extent = getCityExtent(spatialDataset);
+  let studyAreaPolygon = [];
+  if (extent) {
+    const sw = wgs84ToLocalENU(extent.minLat, extent.minLon);
+    const se = wgs84ToLocalENU(extent.minLat, extent.maxLon);
+    const ne = wgs84ToLocalENU(extent.maxLat, extent.maxLon);
+    const nw = wgs84ToLocalENU(extent.maxLat, extent.minLon);
+    studyAreaPolygon = [sw, se, ne, nw];
+  }
+
+  cachedCanonicalLayers = {
+    buildingFootprints,
+    roadNetwork,
+    studyAreaPolygon,
+    extent,
+    totalBuildingAreaM2,
+  };
+
+  return cachedCanonicalLayers;
+}
+
 /**
  * Diagnostics reporter for loaded GIS dataset.
  */
 export function getDatasetDiagnostics(spatialDataset = spatialData) {
+  const canonical = getCanonicalSpatialLayers(spatialDataset);
   const roads = spatialDataset?.roads || [];
-  const buildings = spatialDataset?.buildings || [];
 
   const highwayCounts = {};
   roads.forEach((r) => {
@@ -48,10 +143,12 @@ export function getDatasetDiagnostics(spatialDataset = spatialData) {
   });
 
   return {
-    totalRoadsLoaded: roads.length,
-    totalBuildingsLoaded: buildings.length,
+    totalRoadsLoaded: canonical.roadNetwork.length,
+    totalBuildingsLoaded: spatialDataset?.buildings?.length || 0,
+    validBuildingPolygons: canonical.buildingFootprints.length,
+    totalBuildingFootprintAreaM2: canonical.totalBuildingAreaM2,
     highwayCounts,
-    extent: getCityExtent(spatialDataset),
+    extent: canonical.extent,
   };
 }
 
@@ -96,15 +193,15 @@ export function getMetricFootprintPoints(centerENU, widthMeters, lengthMeters, o
   const hl = lengthMeters / 2.0;
 
   const samplePoints = [
-    { x: -hw, y: hl },   // Top-Left corner
-    { x: hw, y: hl },    // Top-Right corner
-    { x: hw, y: -hl },   // Bottom-Right corner
-    { x: -hw, y: -hl },  // Bottom-Left corner
-    { x: 0, y: hl },     // Top-Edge midpoint
-    { x: hw, y: 0 },     // Right-Edge midpoint
-    { x: 0, y: -hl },    // Bottom-Edge midpoint
-    { x: -hw, y: 0 },    // Left-Edge midpoint
-    { x: 0, y: 0 },      // Center point
+    { x: -hw, y: hl },   // Top-Left corner (0)
+    { x: hw, y: hl },    // Top-Right corner (1)
+    { x: hw, y: -hl },   // Bottom-Right corner (2)
+    { x: -hw, y: -hl },  // Bottom-Left corner (3)
+    { x: 0, y: hl },     // Top-Edge midpoint (4)
+    { x: hw, y: 0 },     // Right-Edge midpoint (5)
+    { x: 0, y: -hl },    // Bottom-Edge midpoint (6)
+    { x: -hw, y: 0 },    // Left-Edge midpoint (7)
+    { x: 0, y: 0 },      // Center point (8)
   ];
 
   return samplePoints.map((pt) => {
@@ -149,7 +246,7 @@ export function metricAABBsOverlap(boxA, boxB) {
 
 /**
  * Validates development placement against city extent, road network, buildings, and placed developments
- * using Local Tangent Plane ENU metric geometry (1 unit = 1 meter).
+ * using Local Tangent Plane ENU metric 2D Polygon geometry (1 unit = 1 meter).
  */
 export function validateBuildability(lat, lon, devType, existingDevs = [], properties = {}, buildingHeightOverride = 0) {
   if (typeof lat !== 'number' || typeof lon !== 'number' || Number.isNaN(lat) || Number.isNaN(lon)) {
@@ -179,9 +276,10 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
   const resultDims = { width: dims.width, length: dims.length, height: bldgHeight, buildingHeight: bldgHeight, orientation };
   const allowedTypes = Object.keys(SUPPORTED_DEV_TYPES);
 
+  const { buildingFootprints, roadNetwork, studyAreaPolygon, extent } = getCanonicalSpatialLayers(spatialData);
+
   // 1. Dynamic City Extent Check
-  const cityExtent = getCityExtent(spatialData);
-  if (!cityExtent) {
+  if (!extent) {
     return {
       valid: false,
       reason: 'outside_city_bounds',
@@ -192,11 +290,11 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     };
   }
 
-  if (lat < cityExtent.minLat || lat > cityExtent.maxLat || lon < cityExtent.minLon || lon > cityExtent.maxLon) {
+  if (lat < extent.minLat || lat > extent.maxLat || lon < extent.minLon || lon > extent.maxLon) {
     return {
       valid: false,
-      reason: 'outside_city_bounds',
-      conflictType: 'outside_city_bounds',
+      reason: 'outside_study_area',
+      conflictType: 'outside_study_area',
       coordinates: resultCoords,
       dimensions: resultDims,
       allowedTypes,
@@ -206,83 +304,56 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
   // Convert proposed building center to Local ENU Metric Coordinates (meters)
   const centerENU = wgs84ToLocalENU(lat, lon);
   const pointsENU = getMetricFootprintPoints(centerENU, dims.width, dims.length, orientation);
-  const proposedAABB = getMetricAABB(pointsENU, ROAD_CLEARANCE_METERS);
+  
+  // 4-corner metric polygon for footprint geometry
+  const footprintPolygon = [pointsENU[0], pointsENU[1], pointsENU[2], pointsENU[3]];
 
-  // 2. Road Network Collision (Two-stage Metric ENU Clearance Math)
-  const roads = spatialData?.roads || [];
-
-  for (const roadFeature of roads) {
-    const rawCoords = roadFeature.coordinates || roadFeature;
-    if (!Array.isArray(rawCoords) || rawCoords.length < 2) continue;
-
-    const hwType = roadFeature.highway || 'default';
-    const roadWidth = ROAD_WIDTH_BY_TYPE[hwType] || ROAD_WIDTH_BY_TYPE.default;
-    const clearanceThreshold = (roadWidth / 2.0) + ROAD_CLEARANCE_METERS;
-
-    // Convert road points to local ENU meters
-    const enuRoadPts = rawCoords.map((pt) => {
-      const rLat = Array.isArray(pt) ? pt[0] : pt.latitude;
-      const rLon = Array.isArray(pt) ? pt[1] : pt.longitude;
-      return wgs84ToLocalENU(rLat, rLon);
-    });
-
-    // Stage 1: Fast Metric AABB Pre-filter
-    let rMinX = Infinity, rMaxX = -Infinity, rMinY = Infinity, rMaxY = -Infinity;
-    enuRoadPts.forEach((pt) => {
-      if (pt.x < rMinX) rMinX = pt.x;
-      if (pt.x > rMaxX) rMaxX = pt.x;
-      if (pt.y < rMinY) rMinY = pt.y;
-      if (pt.y > rMaxY) rMaxY = pt.y;
-    });
-
-    const roadAABB = {
-      minX: rMinX - clearanceThreshold,
-      maxX: rMaxX + clearanceThreshold,
-      minY: rMinY - clearanceThreshold,
-      maxY: rMaxY + clearanceThreshold,
+  // Test Study Area Containment (entire footprint must lie inside study area polygon)
+  if (studyAreaPolygon.length >= 3 && !isPolygonInsidePolygon(footprintPolygon, studyAreaPolygon)) {
+    return {
+      valid: false,
+      reason: 'outside_study_area',
+      conflictType: 'outside_study_area',
+      coordinates: resultCoords,
+      dimensions: resultDims,
+      allowedTypes,
     };
+  }
 
-    if (!metricAABBsOverlap(proposedAABB, roadAABB)) {
-      continue;
-    }
+  // 2. Existing Building Footprint Collision Test (Polygon vs Polygon)
+  const bufferedBuildingAABB = getMetricAABB(pointsENU, BUILDING_CLEARANCE_METERS);
+  for (const bldg of buildingFootprints) {
+    if (!metricAABBsOverlap(bufferedBuildingAABB, bldg.aabb)) continue;
 
-    // Stage 2: Exact Metric Segment Clearance Check against footprint sample points
-    for (let i = 0; i < enuRoadPts.length - 1; i++) {
-      const a = enuRoadPts[i];
-      const b = enuRoadPts[i + 1];
-
-      for (const pt of pointsENU) {
-        const ptDist = metricPointToSegmentDistance(pt.x, pt.y, a.x, a.y, b.x, b.y);
-        if (ptDist < clearanceThreshold) {
-          return {
-            valid: false,
-            reason: 'road_collision',
-            conflictType: 'road_collision',
-            coordinates: resultCoords,
-            dimensions: resultDims,
-            allowedTypes,
-          };
-        }
-      }
+    if (doPolygonsIntersect(footprintPolygon, bldg.enuPoints)) {
+      return {
+        valid: false,
+        reason: 'building_collision',
+        conflictType: 'building_collision',
+        nearestBuildingId: bldg.id,
+        coordinates: resultCoords,
+        dimensions: resultDims,
+        allowedTypes,
+      };
     }
   }
 
-  // 3. Existing Building Collision in Local ENU Metric Coordinates
-  const buildings = spatialData?.buildings || [];
+  // 3. Road Network Collision Test (Polygon vs Polyline + Road Clearance Buffer)
+  for (const road of roadNetwork) {
+    const roadAABB = getMetricAABB(pointsENU, road.clearanceThreshold);
+    if (!metricAABBsOverlap(roadAABB, road.aabb)) continue;
 
-  for (const bldg of buildings) {
-    if (!bldg.centroid) continue;
-    const [bLat, bLon] = bldg.centroid;
-    const bldgENU = wgs84ToLocalENU(bLat, bLon);
-    const bldgRadius = bldg.radius || 12.0;
+    for (let i = 0; i < road.enuPoints.length - 1; i++) {
+      const a = road.enuPoints[i];
+      const b = road.enuPoints[i + 1];
 
-    for (const pt of pointsENU) {
-      const distMeters = Math.hypot(pt.x - bldgENU.x, pt.y - bldgENU.y);
-      if (distMeters < (bldgRadius + BUILDING_CLEARANCE_METERS)) {
+      const dist = polygonToSegmentDistance(footprintPolygon, a.x, a.y, b.x, b.y);
+      if (dist < road.clearanceThreshold) {
         return {
           valid: false,
-          reason: 'building_collision',
-          conflictType: 'building_collision',
+          reason: 'road_collision',
+          conflictType: 'road_collision',
+          nearestRoadId: road.id,
           coordinates: resultCoords,
           dimensions: resultDims,
           allowedTypes,
@@ -291,7 +362,8 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
     }
   }
 
-  // 4. Placed Proposed Developments Collision in Metric Coordinates
+  // 4. Placed Proposed Developments Collision (Polygon vs Polygon)
+  const bufferedDevAABB = getMetricAABB(pointsENU, DEVELOPMENT_CLEARANCE_METERS);
   for (const existing of existingDevs) {
     const existingLat = Number(existing.latitude);
     const existingLon = Number(existing.longitude);
@@ -304,19 +376,35 @@ export function validateBuildability(lat, lon, devType, existingDevs = [], prope
       existingModel.footprint.length,
       existingModel.orientation || 0
     );
-
+    const existingPolygon = [existingPoints[0], existingPoints[1], existingPoints[2], existingPoints[3]];
     const existingAABB = getMetricAABB(existingPoints, DEVELOPMENT_CLEARANCE_METERS);
 
-    if (metricAABBsOverlap(proposedAABB, existingAABB)) {
-      return {
-        valid: false,
-        reason: 'development_collision',
-        conflictType: 'development_collision',
-        coordinates: resultCoords,
-        dimensions: resultDims,
-        allowedTypes,
-      };
+    if (metricAABBsOverlap(bufferedDevAABB, existingAABB)) {
+      if (doPolygonsIntersect(footprintPolygon, existingPolygon)) {
+        return {
+          valid: false,
+          reason: 'development_collision',
+          conflictType: 'development_collision',
+          coordinates: resultCoords,
+          dimensions: resultDims,
+          allowedTypes,
+        };
+      }
     }
+  }
+
+  // 5. Minimum Area Requirement
+  const proposedArea = dims.width * dims.length;
+  const spec = SUPPORTED_DEV_TYPES[devType];
+  if (spec && spec.minArea && proposedArea < spec.minArea) {
+    return {
+      valid: false,
+      reason: 'insufficient_buildable_area',
+      conflictType: 'insufficient_buildable_area',
+      coordinates: resultCoords,
+      dimensions: resultDims,
+      allowedTypes,
+    };
   }
 
   // Candidate placement location valid

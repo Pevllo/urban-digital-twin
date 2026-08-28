@@ -67,7 +67,9 @@ export class DevelopmentStore {
     const merged = {
       ...existing,
       ...updatedData,
-      properties: updatedData.properties ? { ...existing.properties, ...updatedData.properties } : existing.properties,
+      properties: updatedData.properties
+        ? { ...existing.properties, ...updatedData.properties }
+        : { ...existing.properties },
       id: devId,
       development_id: devId,
     };
@@ -84,14 +86,17 @@ export class DevelopmentStore {
       throw new Error(`Development '${devId}' not found.`);
     }
 
-    existing.latitude = Number(latitude);
-    existing.longitude = Number(longitude);
-    existing.zone_id = zoneId;
+    const updated = createDevelopmentModel({
+      ...existing,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      zone_id: zoneId,
+      properties: { ...existing.properties },
+    });
 
-    const normalized = createDevelopmentModel(existing);
-    this.developments.set(devId, normalized);
+    this.developments.set(devId, updated);
     this.notify();
-    return normalized;
+    return updated;
   }
 
   deleteDevelopment(devId) {

@@ -66,6 +66,9 @@
             <button id="menu-toggle-debug" class="dropdown-item">
               <span class="item-icon">⚙</span> Debug Mode
             </button>
+            <button id="menu-toggle-buildable" class="dropdown-item">
+              <span class="item-icon">🟩</span> Show Buildable Areas
+            </button>
             <div class="dropdown-divider"></div>
             <button id="menu-about" class="dropdown-item">
               <span class="item-icon">ℹ</span> About System
@@ -94,6 +97,11 @@
       <div class="debug-row"><span>Cesium Entity:</span><span id="debug-entity-status" class="debug-badge green">—</span></div>
     </div>
 
+    <!-- Floating Restore Sidebar Button (Visible when sidebar is collapsed) -->
+    <button id="btn-restore-sidebar" class="sidebar-restore-btn hidden" aria-label="Open sidebar" title="Open sidebar">
+      <span class="restore-icon">▶</span>
+    </button>
+
     <!-- Compact 300px Left Dashboard Sidebar -->
     <aside id="sidebar-dashboard" class="sidebar-dashboard glass-sidebar">
       <!-- Sidebar Header & Toggle -->
@@ -101,7 +109,7 @@
         <div class="sidebar-brand">
           <span id="sidebar-panel-title" class="sidebar-title">Map Overview</span>
         </div>
-        <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle Sidebar" title="Collapse / Expand Sidebar">
+        <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
           <span class="toggle-icon">◀</span>
         </button>
       </div>
