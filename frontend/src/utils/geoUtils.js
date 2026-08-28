@@ -210,9 +210,9 @@ export function getDevelopmentFootprintPolygonWGS84(latitude, longitude, widthMe
  * 2. viewer.camera.pickEllipsoid(windowPosition, ellipsoid) (Ellipsoid fallback)
  * 3. viewer.scene.pickPosition(windowPosition) (3D Tiles / Scene fallback)
  *
- * Temporarily hides candidate preview entities to prevent raycast self-intersection.
+ * Pure function: Window coordinates -> WGS84 coordinates. Never mutates scene/entity state.
  */
-export function pickGeographicLocation(viewer, clientX, clientY, previewEntities = []) {
+export function pickGeographicLocation(viewer, clientX, clientY) {
   if (!viewer || !viewer.scene) return null;
 
   const canvas = viewer.scene.canvas;
@@ -236,18 +236,6 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntities
 
   const windowPosition = new Cartesian2(clientX - rect.left, clientY - rect.top);
 
-  // Normalize preview entities to array
-  const entitiesToHide = Array.isArray(previewEntities)
-    ? previewEntities.filter(Boolean)
-    : (previewEntities ? [previewEntities] : []);
-
-  const visibilityStates = new Map();
-  entitiesToHide.forEach((ent) => {
-    const isVisible = ent.show !== false;
-    visibilityStates.set(ent, isVisible);
-    ent.show = false;
-  });
-
   let cartesian = null;
 
   try {
@@ -270,11 +258,6 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntities
     }
   } catch (e) {
     cartesian = null;
-  } finally {
-    // Restore entity visibility safely with explicit boolean true
-    visibilityStates.forEach((wasVisible, ent) => {
-      ent.show = Boolean(wasVisible);
-    });
   }
 
   if (!cartesian) return null;
@@ -282,13 +265,14 @@ export function pickGeographicLocation(viewer, clientX, clientY, previewEntities
   const lonLat = cartesianToLonLat(cartesian);
   if (!lonLat) return null;
 
+  const groundHeight = Number.isFinite(lonLat.terrainHeight) ? lonLat.terrainHeight : (lonLat.height || 0.0);
   const resolved = resolveNearestZone(lonLat.latitude, lonLat.longitude);
 
   return {
     latitude: lonLat.latitude,
     longitude: lonLat.longitude,
-    height: lonLat.height,
-    terrainHeight: lonLat.terrainHeight,
+    height: groundHeight,
+    terrainHeight: groundHeight,
     zone_id: resolved.zone_id,
     distance_km: resolved.distance_km,
     cartesian,

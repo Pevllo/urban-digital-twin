@@ -83,8 +83,7 @@ export function createPlacementController(viewer, options = {}) {
         const picked = pickGeographicLocation(
           viewer,
           click.position.x,
-          click.position.y,
-          buildabilityOverlay.getPreviewEntity()
+          click.position.y
         );
 
         if (picked) {
@@ -129,8 +128,7 @@ export function createPlacementController(viewer, options = {}) {
         const picked = pickGeographicLocation(
           viewer,
           click.position.x,
-          click.position.y,
-          buildabilityOverlay.getPreviewEntity()
+          click.position.y
         );
 
         if (picked) {
@@ -305,8 +303,7 @@ export function createPlacementController(viewer, options = {}) {
     const picked = pickGeographicLocation(
       viewer,
       e.clientX,
-      e.clientY,
-      buildabilityOverlay.getPreviewEntity()
+      e.clientY
     );
 
     if (picked) {
@@ -459,8 +456,7 @@ export function createPlacementController(viewer, options = {}) {
     const releasePick = pickGeographicLocation(
       viewer,
       e.clientX,
-      e.clientY,
-      buildabilityOverlay.getPreviewEntity()
+      e.clientY
     );
 
     if (releasePick) {
