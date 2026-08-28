@@ -649,10 +649,15 @@ export function initializeApp() {
     }
 
     // 4. Render Development Palette Cards
-    renderPaletteCards(devCardsContainer, (typeKey, spec, event) => {
-      placementController.startPlacement(typeKey, spec, 'CLICK_TO_PLACE');
-      if (placementBanner) placementBanner.classList.remove('hidden');
-      if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
+    renderPaletteCards(devCardsContainer, {
+      onCardPointerDown: (typeKey, spec, event) => {
+        if (placementController) placementController.handleCardPointerDown(typeKey, spec, event);
+      },
+      onCardClick: (typeKey, spec) => {
+        if (placementController) placementController.handleCardClick(typeKey, spec);
+        if (placementBanner) placementBanner.classList.remove('hidden');
+        if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
+      },
     });
 
     window.addEventListener('pointermove', (e) => {

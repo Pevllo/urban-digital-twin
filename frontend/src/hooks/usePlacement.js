@@ -2,23 +2,25 @@ import { ScreenSpaceEventHandler, ScreenSpaceEventType } from 'cesium';
 import { pickGeographicLocation } from '../utils/geoUtils.js';
 import { validateBuildability } from '../utils/buildabilityEngine.js';
 
-export const INTERACTION_MODES = {
+export const PLACEMENT_INTERACTIONS = {
   NONE: 'NONE',
   CLICK_TO_PLACE: 'CLICK_TO_PLACE',
-  DRAG_TO_PLACE: 'DRAG_TO_PLACE',
+  DRAGGING_FROM_SIDEBAR: 'DRAGGING_FROM_SIDEBAR',
   MOVE_EXISTING: 'MOVE_EXISTING',
 };
 
+// Backward compatibility alias
+export const INTERACTION_MODES = PLACEMENT_INTERACTIONS;
+
 export const PLACEMENT_STATES = {
   IDLE: 'IDLE',
-  PLACEMENT_ACTIVE: 'PLACEMENT_ACTIVE',
-  PREVIEWING: 'PREVIEWING',
-  AWAITING_CONFIGURATION: 'AWAITING_CONFIGURATION',
+  PLACING: 'PLACING',
+  CONFIGURING: 'CONFIGURING',
+  PLACEMENT_ACTIVE: 'PLACING',
+  PREVIEWING: 'PLACING',
+  AWAITING_CONFIGURATION: 'CONFIGURING',
   CONFIRMED: 'CONFIRMED',
   CANCELLED: 'CANCELLED',
-  // Backward compatibility aliases
-  PLACING: 'PLACEMENT_ACTIVE',
-  CONFIGURING: 'AWAITING_CONFIGURATION',
 };
 
 export function createPlacementController(viewer, options = {}) {
@@ -37,12 +39,21 @@ export function createPlacementController(viewer, options = {}) {
   } = options;
 
   let placementState = PLACEMENT_STATES.IDLE;
-  let placementInteractionMode = INTERACTION_MODES.NONE;
+  let placementInteraction = PLACEMENT_INTERACTIONS.NONE;
   let activePlacementType = null;
   let dragStarted = false;
   let movingDevId = null;
   let pendingPlacementLocation = null;
   let screenHandler = null;
+
+  // Pointer drag threshold candidate tracking
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragCandidateType = null;
+  let dragCandidateSpec = null;
+  let capturedPointerId = null;
+  let capturedElement = null;
+  const DRAG_THRESHOLD = 5;
 
   function initScreenEvents() {
     if (!viewer) return;
@@ -52,15 +63,9 @@ export function createPlacementController(viewer, options = {}) {
 
     // Single Left Click handler: Repositioning, Click-to-place, or Entity Selection
     screenHandler.setInputAction((click) => {
-      console.log('[PLACEMENT EVENT] LEFT_CLICK', {
-        state: placementState,
-        mode: placementInteractionMode,
-        movingDevId,
-      });
-
       // If modal is currently open configuring properties, ignore map clicks
       if (
-        placementState === PLACEMENT_STATES.AWAITING_CONFIGURATION ||
+        placementState === PLACEMENT_STATES.CONFIGURING ||
         pendingPlacementLocation
       ) {
         return;
@@ -115,13 +120,11 @@ export function createPlacementController(viewer, options = {}) {
         return;
       }
 
-      // 2. Click-to-place mode (when active placement initiated via palette)
+      // 2. Click-to-place mode confirmation on 3D map click
       if (
         activePlacementType &&
-        (placementState === PLACEMENT_STATES.PLACEMENT_ACTIVE ||
-          placementState === PLACEMENT_STATES.PREVIEWING) &&
-        (placementInteractionMode === INTERACTION_MODES.CLICK_TO_PLACE ||
-          placementInteractionMode === INTERACTION_MODES.NONE)
+        placementState === PLACEMENT_STATES.PLACING &&
+        placementInteraction === PLACEMENT_INTERACTIONS.CLICK_TO_PLACE
       ) {
         const picked = pickGeographicLocation(
           viewer,
@@ -131,12 +134,6 @@ export function createPlacementController(viewer, options = {}) {
         );
 
         if (picked) {
-          console.log('[PLACEMENT CLICK]', {
-            latitude: picked.latitude,
-            longitude: picked.longitude,
-            zone_id: picked.zone_id,
-          });
-
           const existingDevs = devStore.getAllDevelopments();
           const validation = validateBuildability(
             picked.latitude,
@@ -158,22 +155,14 @@ export function createPlacementController(viewer, options = {}) {
               isNew: true,
             };
 
-            console.log('[PENDING LOCATION]', {
-              latitude: pendingPlacementLocation.latitude,
-              longitude: pendingPlacementLocation.longitude,
-              zone_id: pendingPlacementLocation.zone_id,
-              id: pendingPlacementLocation.id,
-            });
-
             console.log('[PLACEMENT STATE TRANSITION]', {
               from: placementState,
-              to: PLACEMENT_STATES.AWAITING_CONFIGURATION,
+              to: PLACEMENT_STATES.CONFIGURING,
               type: activePlacementType,
               pendingId: pendingPlacementLocation.id,
             });
 
-            // Transition state to AWAITING_CONFIGURATION and freeze/clear preview
-            placementState = PLACEMENT_STATES.AWAITING_CONFIGURATION;
+            placementState = PLACEMENT_STATES.CONFIGURING;
             buildabilityOverlay.clearPreview();
 
             if (infoCardElements.card) infoCardElements.card.classList.add('hidden');
@@ -195,8 +184,10 @@ export function createPlacementController(viewer, options = {}) {
         if (pickedObject && pickedObject.id) {
           const entity = pickedObject.id;
 
-          // NEVER select the temporary preview entity as a permanent development
-          if (entity.id === 'placement-preview-entity' || (entity.properties && entity.properties.isPreview && entity.properties.isPreview.getValue())) {
+          if (
+            entity.id === 'placement-preview-entity' ||
+            (entity.properties && entity.properties.isPreview && entity.properties.isPreview.getValue())
+          ) {
             return;
           }
 
@@ -218,21 +209,45 @@ export function createPlacementController(viewer, options = {}) {
     }, ScreenSpaceEventType.LEFT_CLICK);
   }
 
-  function startPlacement(typeKey, spec, mode = INTERACTION_MODES.CLICK_TO_PLACE) {
-    // Teardown any lingering placement session first
+  function handleCardPointerDown(typeKey, spec, e) {
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragCandidateType = typeKey;
+    dragCandidateSpec = spec;
+    dragStarted = false;
+
+    if (e.target && typeof e.target.setPointerCapture === 'function') {
+      try {
+        e.target.setPointerCapture(e.pointerId);
+        capturedPointerId = e.pointerId;
+        capturedElement = e.target;
+      } catch (err) {
+        capturedPointerId = null;
+        capturedElement = null;
+      }
+    }
+  }
+
+  function handleCardClick(typeKey, spec) {
+    if (!dragStarted) {
+      startPlacement(typeKey, spec, PLACEMENT_INTERACTIONS.CLICK_TO_PLACE);
+    }
+  }
+
+  function startPlacement(typeKey, spec, interaction = PLACEMENT_INTERACTIONS.CLICK_TO_PLACE) {
     cancelPlacementMode();
 
     const prevState = placementState;
-    placementState = PLACEMENT_STATES.PLACEMENT_ACTIVE;
+    placementState = PLACEMENT_STATES.PLACING;
     activePlacementType = typeKey;
-    placementInteractionMode = mode || INTERACTION_MODES.CLICK_TO_PLACE;
-    dragStarted = (mode === INTERACTION_MODES.DRAG_TO_PLACE);
+    placementInteraction = interaction;
+    dragStarted = (interaction === PLACEMENT_INTERACTIONS.DRAGGING_FROM_SIDEBAR);
 
     console.log('[PLACEMENT STATE TRANSITION]', {
       from: prevState,
       to: placementState,
       type: activePlacementType,
-      mode: placementInteractionMode,
+      interaction: placementInteraction,
       dragStarted,
     });
 
@@ -242,21 +257,34 @@ export function createPlacementController(viewer, options = {}) {
   }
 
   function handlePointerMove(e) {
-    // If user presses mouse down on sidebar card and starts dragging onto map, convert mode to DRAG_TO_PLACE
-    if (
-      placementInteractionMode === INTERACTION_MODES.CLICK_TO_PLACE &&
-      e.buttons === 1 &&
-      (placementState === PLACEMENT_STATES.PLACEMENT_ACTIVE || placementState === PLACEMENT_STATES.PREVIEWING)
-    ) {
-      placementInteractionMode = INTERACTION_MODES.DRAG_TO_PLACE;
-      dragStarted = true;
+    // 1. Check drag threshold if a card pointerdown candidate is active
+    if (dragCandidateType && !dragStarted) {
+      const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+      if (dist >= DRAG_THRESHOLD) {
+        dragStarted = true;
+        const prevState = placementState;
+        placementState = PLACEMENT_STATES.PLACING;
+        placementInteraction = PLACEMENT_INTERACTIONS.DRAGGING_FROM_SIDEBAR;
+        activePlacementType = dragCandidateType;
+
+        console.log('[DRAG START]', {
+          from: prevState,
+          to: placementState,
+          type: activePlacementType,
+          interaction: placementInteraction,
+          dist,
+        });
+
+        if (placementBanner) placementBanner.classList.remove('hidden');
+        if (bannerText) {
+          bannerText.textContent = `📍 DRAGGING ${dragCandidateSpec ? dragCandidateSpec.label.toUpperCase() : activePlacementType.toUpperCase()} — Drop on 3D map`;
+        }
+      }
     }
 
-    // ONLY update preview when placement or repositioning is active.
-    // NEVER mutate devStore or permanent entities during mouse move.
+    // 2. ONLY update preview when PLACING state is active
     if (
-      (placementState !== PLACEMENT_STATES.PLACEMENT_ACTIVE &&
-        placementState !== PLACEMENT_STATES.PREVIEWING) ||
+      placementState !== PLACEMENT_STATES.PLACING ||
       !activePlacementType ||
       pendingPlacementLocation
     ) {
@@ -271,16 +299,6 @@ export function createPlacementController(viewer, options = {}) {
     );
 
     if (picked) {
-      if (placementState !== PLACEMENT_STATES.PREVIEWING) {
-        console.log('[PLACEMENT STATE TRANSITION]', {
-          from: placementState,
-          to: PLACEMENT_STATES.PREVIEWING,
-          type: activePlacementType,
-          mode: placementInteractionMode,
-        });
-        placementState = PLACEMENT_STATES.PREVIEWING;
-      }
-
       const existingDevs = devStore
         .getAllDevelopments()
         .filter((d) => d.id !== movingDevId && d.development_id !== movingDevId);
@@ -298,7 +316,6 @@ export function createPlacementController(viewer, options = {}) {
         heightOverride
       );
 
-      // ONLY update the temporary preview entity
       buildabilityOverlay.updatePreview(picked, activePlacementType);
 
       const spec = SUPPORTED_DEV_TYPES[activePlacementType] || SUPPORTED_DEV_TYPES.residential_compound || { label: activePlacementType, defaultDimensions: { width: 10, length: 10, height: 3 } };
@@ -355,7 +372,7 @@ export function createPlacementController(viewer, options = {}) {
       // 2. Show Bottom Placement Legend & Banner
       if (placementLegend) placementLegend.classList.remove('hidden');
       if (placementBanner) placementBanner.classList.remove('hidden');
-      if (bannerText) {
+      if (bannerText && placementInteraction !== PLACEMENT_INTERACTIONS.DRAGGING_FROM_SIDEBAR) {
         bannerText.textContent = `PLACEMENT MODE ACTIVE — Move pointer over 3D map to place ${spec.label}`;
       }
 
@@ -377,29 +394,39 @@ export function createPlacementController(viewer, options = {}) {
   }
 
   function handlePointerUp(e) {
-    console.log('[PLACEMENT EVENT] POINTER_UP', {
-      state: placementState,
-      mode: placementInteractionMode,
-      dragStarted,
-    });
-
-    // ONLY handle release if an actual DRAG_TO_PLACE drag was initiated
-    if (placementInteractionMode !== INTERACTION_MODES.DRAG_TO_PLACE || !dragStarted) {
-      return;
+    if (capturedElement && capturedPointerId !== null) {
+      try {
+        capturedElement.releasePointerCapture(capturedPointerId);
+      } catch (err) {}
+      capturedPointerId = null;
+      capturedElement = null;
     }
-    dragStarted = false;
 
+    // ONLY process pointerup as a drop if DRAGGING_FROM_SIDEBAR and dragStarted is true
     if (
-      (placementState !== PLACEMENT_STATES.PLACEMENT_ACTIVE &&
-        placementState !== PLACEMENT_STATES.PREVIEWING) ||
-      !activePlacementType
+      placementInteraction !== PLACEMENT_INTERACTIONS.DRAGGING_FROM_SIDEBAR ||
+      !dragStarted ||
+      placementState !== PLACEMENT_STATES.PLACING
     ) {
+      dragCandidateType = null;
+      dragCandidateSpec = null;
       return;
     }
 
-    // Check if pointerup occurred over map canvas
+    dragStarted = false;
+    const currentType = activePlacementType || dragCandidateType;
+    dragCandidateType = null;
+    dragCandidateSpec = null;
+
+    if (!currentType) return;
+
+    // Verify pointer release occurred inside map canvas bounds
     const canvas = viewer?.scene?.canvas;
-    if (!canvas) return;
+    if (!canvas) {
+      cancelPlacementMode();
+      return;
+    }
+
     const rect = canvas.getBoundingClientRect();
     if (
       e.clientX < rect.left ||
@@ -407,7 +434,8 @@ export function createPlacementController(viewer, options = {}) {
       e.clientY < rect.top ||
       e.clientY > rect.bottom
     ) {
-      // Released outside map canvas (e.g. over sidebar): DO NOT cancel placement mode!
+      console.log('[DROP OUTSIDE MAP CANVAS] Drag cancelled cleanly.');
+      cancelPlacementMode();
       return;
     }
 
@@ -418,9 +446,8 @@ export function createPlacementController(viewer, options = {}) {
       buildabilityOverlay.getPreviewEntity()
     );
 
-    // If released over map canvas at a valid coordinate:
     if (releasePick) {
-      console.log('[PLACEMENT CLICK]', {
+      console.log('[DROP ON MAP]', {
         latitude: releasePick.latitude,
         longitude: releasePick.longitude,
         zone_id: releasePick.zone_id,
@@ -433,63 +460,45 @@ export function createPlacementController(viewer, options = {}) {
       const validation = validateBuildability(
         releasePick.latitude,
         releasePick.longitude,
-        activePlacementType,
+        currentType,
         existingDevs
       );
 
       if (validation.valid) {
-        if (movingDevId) {
-          const updated = devStore.moveDevelopment(
-            movingDevId,
-            releasePick.latitude,
-            releasePick.longitude,
-            releasePick.zone_id
-          );
-          developmentRenderer.renderDevelopment(updated);
-          if (onStatusUpdate) {
-            onStatusUpdate(`Moved ${updated.id} to Zone ${releasePick.zone_id}`, true);
-          }
-          cancelPlacementMode();
-        } else {
-          const tempId = devStore.generateId();
-          pendingPlacementLocation = {
-            id: tempId,
-            development_id: tempId,
-            development_type: activePlacementType,
-            latitude: Number(releasePick.latitude),
-            longitude: Number(releasePick.longitude),
-            terrainHeight: Number(releasePick.terrainHeight || releasePick.height || 0),
-            zone_id: releasePick.zone_id,
-            isNew: true,
-          };
+        const tempId = devStore.generateId();
+        pendingPlacementLocation = {
+          id: tempId,
+          development_id: tempId,
+          development_type: currentType,
+          latitude: Number(releasePick.latitude),
+          longitude: Number(releasePick.longitude),
+          terrainHeight: Number(releasePick.terrainHeight || releasePick.height || 0),
+          zone_id: releasePick.zone_id,
+          isNew: true,
+        };
 
-          console.log('[PENDING LOCATION]', {
-            latitude: pendingPlacementLocation.latitude,
-            longitude: pendingPlacementLocation.longitude,
-            zone_id: pendingPlacementLocation.zone_id,
-            id: pendingPlacementLocation.id,
-          });
+        console.log('[PLACEMENT STATE TRANSITION]', {
+          from: placementState,
+          to: PLACEMENT_STATES.CONFIGURING,
+          type: currentType,
+          pendingId: pendingPlacementLocation.id,
+        });
 
-          console.log('[PLACEMENT STATE TRANSITION]', {
-            from: placementState,
-            to: PLACEMENT_STATES.AWAITING_CONFIGURATION,
-            type: activePlacementType,
-            pendingId: pendingPlacementLocation.id,
-          });
+        placementState = PLACEMENT_STATES.CONFIGURING;
+        buildabilityOverlay.clearPreview();
 
-          placementState = PLACEMENT_STATES.AWAITING_CONFIGURATION;
-          buildabilityOverlay.clearPreview();
+        if (infoCardElements.card) infoCardElements.card.classList.add('hidden');
+        if (placementLegend) placementLegend.classList.add('hidden');
 
-          if (infoCardElements.card) infoCardElements.card.classList.add('hidden');
-          if (placementLegend) placementLegend.classList.add('hidden');
-
-          if (onOpenPropertiesModal) {
-            onOpenPropertiesModal({ ...pendingPlacementLocation });
-          }
+        if (onOpenPropertiesModal) {
+          onOpenPropertiesModal({ ...pendingPlacementLocation });
         }
       } else {
-        if (onStatusUpdate) onStatusUpdate(`Placement rejected: ${validation.reason}`);
+        if (onStatusUpdate) onStatusUpdate(`Placement rejected: ${validation.reason || validation.conflictType}`);
+        cancelPlacementMode();
       }
+    } else {
+      cancelPlacementMode();
     }
   }
 
@@ -498,16 +507,16 @@ export function createPlacementController(viewer, options = {}) {
     const devRecord = devStore.getDevelopment(devId);
     if (!devRecord) return;
 
-    placementState = PLACEMENT_STATES.PLACEMENT_ACTIVE;
-    placementInteractionMode = INTERACTION_MODES.MOVE_EXISTING;
+    placementState = PLACEMENT_STATES.PLACING;
+    placementInteraction = PLACEMENT_INTERACTIONS.MOVE_EXISTING;
     activePlacementType = devRecord.development_type || 'hospital';
     movingDevId = devId;
 
     console.log('[PLACEMENT STATE TRANSITION]', {
       from: PLACEMENT_STATES.IDLE,
-      to: PLACEMENT_STATES.PLACEMENT_ACTIVE,
+      to: PLACEMENT_STATES.PLACING,
       movingDevId,
-      mode: INTERACTION_MODES.MOVE_EXISTING,
+      interaction: PLACEMENT_INTERACTIONS.MOVE_EXISTING,
     });
   }
 
@@ -516,15 +525,25 @@ export function createPlacementController(viewer, options = {}) {
       from: placementState,
       to: PLACEMENT_STATES.IDLE,
       type: activePlacementType,
-      mode: placementInteractionMode,
+      interaction: placementInteraction,
     });
 
     placementState = PLACEMENT_STATES.IDLE;
-    placementInteractionMode = INTERACTION_MODES.NONE;
+    placementInteraction = PLACEMENT_INTERACTIONS.NONE;
     activePlacementType = null;
     dragStarted = false;
     movingDevId = null;
     pendingPlacementLocation = null;
+
+    dragCandidateType = null;
+    dragCandidateSpec = null;
+    if (capturedElement && capturedPointerId !== null) {
+      try {
+        capturedElement.releasePointerCapture(capturedPointerId);
+      } catch (err) {}
+      capturedPointerId = null;
+      capturedElement = null;
+    }
 
     buildabilityOverlay.clearPreview();
     if (debugElements.panel) debugElements.panel.classList.add('hidden');
@@ -541,51 +560,20 @@ export function createPlacementController(viewer, options = {}) {
     }
   }
 
-
-  function getState() {
-    return placementState;
-  }
-
-  function getActiveType() {
-    return activePlacementType;
-  }
-
-  function getMovingDevId() {
-    return movingDevId;
-  }
-
-  function setMovingId(id) {
-    cancelPlacementMode();
-    const devRecord = devStore.getDevelopment(id);
-    if (!devRecord) return;
-
-    movingDevId = id;
-    activePlacementType = devRecord.development_type;
-    placementState = PLACEMENT_STATES.PLACEMENT_ACTIVE;
-    if (onStatusUpdate) {
-      onStatusUpdate(`REPOSITIONING ${id} — Move cursor to select new location on 3D map`);
-    }
-
-    console.log('[PLACEMENT STATE TRANSITION: REPOSITIONING]', {
-      movingDevId: id,
-      activePlacementType,
-      state: placementState,
-      devRecordPosition: { lat: devRecord.latitude, lon: devRecord.longitude },
-    });
-  }
-
   return {
     initScreenEvents,
     startPlacement,
+    handleCardPointerDown,
+    handleCardClick,
     handlePointerMove,
     handlePointerUp,
+    setMovingId,
     cancelPlacementMode,
     destroy,
-    getPendingLocation,
-    getState,
-    getActiveType,
-    getMovingDevId,
-    setMovingId,
+    getPendingLocation: () => (pendingPlacementLocation ? { ...pendingPlacementLocation } : null),
+    getState: () => placementState,
+    getInteraction: () => placementInteraction,
+    getActiveType: () => activePlacementType,
+    getMovingDevId: () => movingDevId,
   };
 }
-
