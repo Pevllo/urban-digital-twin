@@ -22,6 +22,10 @@ export function createPlacementController(viewer, options = {}) {
     onOpenPropertiesModal,
     onStatusUpdate,
     debugElements = {},
+    infoCardElements = {},
+    placementLegend = null,
+    placementBanner = null,
+    bannerText = null,
   } = options;
 
   let placementState = PLACEMENT_STATES.IDLE;
@@ -227,17 +231,77 @@ export function createPlacementController(viewer, options = {}) {
       // ONLY update the temporary preview entity
       buildabilityOverlay.updatePreview(picked, activePlacementType);
 
-      // Update Debug Info Panel
+      const spec = SUPPORTED_DEV_TYPES[activePlacementType] || SUPPORTED_DEV_TYPES.residential_compound;
+      const collision = picked.collision || { valid: true };
+      const dims = collision.dimensions || spec.defaultDimensions;
+      const width = dims.width || spec.defaultDimensions.width;
+      const length = dims.length || spec.defaultDimensions.length;
+      const height = dims.height || dims.buildingHeight || spec.defaultDimensions.height;
+      const floors = dims.floors || Math.max(1, Math.round(height / 3));
+      const areaSqm = width * length;
+
+      // 1. Update Floating HTML Placement Information Card
+      if (infoCardElements.card) {
+        infoCardElements.card.classList.remove('hidden');
+        if (infoCardElements.icon) infoCardElements.icon.textContent = spec.icon || '🏠';
+        if (infoCardElements.title) infoCardElements.title.textContent = spec.label || activePlacementType;
+        if (infoCardElements.footprint) infoCardElements.footprint.textContent = `${width}m × ${length}m`;
+        if (infoCardElements.area) infoCardElements.area.textContent = `${areaSqm.toLocaleString()} m²`;
+        if (infoCardElements.height) infoCardElements.height.textContent = `${height.toFixed(2)} m`;
+        if (infoCardElements.storeys) infoCardElements.storeys.textContent = `${floors}`;
+
+        if (collision.valid) {
+          if (infoCardElements.badge) {
+            infoCardElements.badge.className = 'info-card-badge valid';
+            infoCardElements.badge.textContent = 'VALID';
+          }
+          if (infoCardElements.footer) {
+            infoCardElements.footer.className = 'card-status-footer valid';
+          }
+          if (infoCardElements.statusIcon) infoCardElements.statusIcon.textContent = '✓';
+          if (infoCardElements.statusText) infoCardElements.statusText.textContent = 'No conflicts detected';
+        } else {
+          if (infoCardElements.badge) {
+            infoCardElements.badge.className = 'info-card-badge invalid';
+            infoCardElements.badge.textContent = 'INVALID';
+          }
+          if (infoCardElements.footer) {
+            infoCardElements.footer.className = 'card-status-footer invalid';
+          }
+          if (infoCardElements.statusIcon) infoCardElements.statusIcon.textContent = '⚠️';
+
+          const reasonTextMap = {
+            road_collision: 'Road collision detected',
+            building_collision: 'Building collision detected',
+            development_collision: 'Proposed development collision',
+            outside_study_area: 'Outside study area bounds',
+            outside_city_bounds: 'Outside city boundary',
+          };
+          const reasonMsg = reasonTextMap[collision.reason] || collision.reason || 'Placement area blocked';
+          if (infoCardElements.statusText) infoCardElements.statusText.textContent = reasonMsg;
+        }
+      }
+
+      // 2. Show Bottom Placement Legend & Banner
+      if (placementLegend) placementLegend.classList.remove('hidden');
+      if (placementBanner) placementBanner.classList.remove('hidden');
+      if (bannerText) {
+        bannerText.textContent = `PLACEMENT MODE ACTIVE — Move pointer over 3D map to place ${spec.label}`;
+      }
+
+      // 3. Update Bottom-Right Debug Info Panel
       if (debugElements.panel) debugElements.panel.classList.remove('hidden');
       if (debugElements.devType) debugElements.devType.textContent = activePlacementType;
       if (debugElements.devId) debugElements.devId.textContent = movingDevId || 'PREVIEW';
+      if (debugElements.footprint) debugElements.footprint.textContent = `${width}m × ${length}m`;
       if (debugElements.lat) debugElements.lat.textContent = `${picked.latitude.toFixed(4)}° N`;
       if (debugElements.lon) debugElements.lon.textContent = `${picked.longitude.toFixed(4)}° E`;
       if (debugElements.zone) debugElements.zone.textContent = picked.zone_id;
       if (debugElements.status) {
-        debugElements.status.textContent = picked.collision.valid
-          ? 'VALID CANDIDATE'
-          : `BLOCKED (${picked.collision.reason || picked.collision.conflictType})`;
+        debugElements.status.className = collision.valid ? 'debug-badge green' : 'debug-badge red';
+        debugElements.status.textContent = collision.valid
+          ? 'VALID (no conflicts)'
+          : `BLOCKED (${collision.reason || collision.conflictType})`;
       }
     }
   }
@@ -302,6 +366,9 @@ export function createPlacementController(viewer, options = {}) {
           placementState = PLACEMENT_STATES.AWAITING_CONFIGURATION;
           buildabilityOverlay.clearPreview();
 
+          if (infoCardElements.card) infoCardElements.card.classList.add('hidden');
+          if (placementLegend) placementLegend.classList.add('hidden');
+
           if (onOpenPropertiesModal) {
             onOpenPropertiesModal({ ...pendingPlacementLocation });
           }
@@ -310,7 +377,6 @@ export function createPlacementController(viewer, options = {}) {
         if (onStatusUpdate) onStatusUpdate(`Placement rejected: ${validation.reason}`);
       }
     }
-    // If pointer released over sidebar, do NOT cancel placement mode so click-to-place remains active
   }
 
   function cancelPlacementMode() {
@@ -330,6 +396,9 @@ export function createPlacementController(viewer, options = {}) {
 
     buildabilityOverlay.clearPreview();
     if (debugElements.panel) debugElements.panel.classList.add('hidden');
+    if (infoCardElements.card) infoCardElements.card.classList.add('hidden');
+    if (placementLegend) placementLegend.classList.add('hidden');
+    if (placementBanner) placementBanner.classList.add('hidden');
   }
 
   function destroy() {

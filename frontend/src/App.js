@@ -463,6 +463,22 @@ export function initializeApp() {
     }
   }
 
+  const infoCardElements = {
+    card: document.getElementById('placement-info-card'),
+    icon: document.getElementById('info-card-icon'),
+    title: document.getElementById('info-card-title'),
+    badge: document.getElementById('info-card-status-badge'),
+    footprint: document.getElementById('info-card-footprint'),
+    area: document.getElementById('info-card-area'),
+    height: document.getElementById('info-card-height'),
+    storeys: document.getElementById('info-card-storeys'),
+    footer: document.getElementById('info-card-status-footer'),
+    statusIcon: document.getElementById('info-card-status-icon'),
+    statusText: document.getElementById('info-card-status-text'),
+  };
+
+  const placementLegend = document.getElementById('placement-legend');
+
   // Initialize Cesium 3D Viewer & Controllers
   createCesiumViewer('cesiumContainer', updateStatus).then((v) => {
     viewer = v;
@@ -478,6 +494,10 @@ export function initializeApp() {
       onOpenPropertiesModal: openModal,
       onStatusUpdate: updateStatus,
       debugElements,
+      infoCardElements,
+      placementLegend,
+      placementBanner,
+      bannerText,
     });
 
     placementController.initScreenEvents();

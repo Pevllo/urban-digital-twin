@@ -78,23 +78,71 @@
       </div>
     </header>
 
-    <!-- Placement Status Top Pill Banner -->
-    <div id="placement-banner" class="placement-banner glass-pill hidden">
-      <span class="banner-icon">📍</span>
-      <span id="banner-text" class="banner-text">PLACING DEVELOPMENT — Move pointer over 3D map</span>
-      <button id="btn-cancel-placement" class="btn-banner-cancel" aria-label="Cancel Placement">Cancel [ESC]</button>
+    <!-- Top Placement Mode Pill Banner -->
+    <div id="placement-banner" class="placement-banner glass-banner hidden">
+      <span class="banner-dot">🟢</span>
+      <span id="banner-text" class="banner-text">PLACEMENT MODE ACTIVE — Move pointer over 3D map to place Residential Compound</span>
+      <button id="btn-cancel-placement" class="btn-banner-cancel" aria-label="Cancel Placement">Cancel (ESC)</button>
+    </div>
+
+    <!-- Floating Placement Information Card (Upper-Center Map Overlay) -->
+    <div id="placement-info-card" class="placement-info-card glass-info-card hidden">
+      <div class="card-header-row">
+        <div class="card-title-group">
+          <span id="info-card-icon" class="info-card-icon">🏠</span>
+          <span id="info-card-title" class="info-card-title">Residential Compound</span>
+        </div>
+        <span id="info-card-status-badge" class="info-card-badge valid">VALID</span>
+      </div>
+
+      <div class="card-details-grid">
+        <div class="card-detail-row">
+          <span class="detail-label">Footprint:</span>
+          <span id="info-card-footprint" class="detail-value">90m × 18m (1,620 m²)</span>
+        </div>
+        <div class="card-detail-row">
+          <span class="detail-label">Height:</span>
+          <span id="info-card-height" class="detail-value">18.00 m</span>
+        </div>
+        <div class="card-detail-row">
+          <span class="detail-label">Storeys:</span>
+          <span id="info-card-storeys" class="detail-value">6</span>
+        </div>
+      </div>
+
+      <div id="info-card-status-footer" class="card-status-footer valid">
+        <span id="info-card-status-icon" class="status-footer-icon">✓</span>
+        <span id="info-card-status-text" class="status-footer-text">No conflicts detected</span>
+      </div>
+    </div>
+
+    <!-- Bottom-Center Placement Legend Overlay -->
+    <div id="placement-legend" class="placement-legend glass-legend hidden">
+      <div class="legend-item valid">
+        <span class="legend-box valid"></span>
+        <span>Valid Placement</span>
+      </div>
+      <div class="legend-item invalid">
+        <span class="legend-box invalid"></span>
+        <span>Invalid Placement</span>
+      </div>
+      <div class="legend-divider"></div>
+      <div class="legend-instruction">
+        <span class="legend-mouse-icon">🖱</span>
+        <span>Scroll to rotate / zoom</span>
+      </div>
     </div>
 
     <!-- Placement Debug Panel (Bottom Right) -->
     <div id="placement-debug-panel" class="placement-debug-panel glass-panel hidden">
       <div class="debug-title">PHYSICAL PLACEMENT DEBUG</div>
-      <div class="debug-row"><span>Development:</span><strong id="debug-dev-type">—</strong></div>
-      <div class="debug-row"><span>ID:</span><strong id="debug-dev-id">—</strong></div>
-      <div class="debug-row"><span>Footprint:</span><strong id="debug-footprint">—</strong></div>
-      <div class="debug-row"><span>Latitude:</span><strong id="debug-lat">—</strong></div>
-      <div class="debug-row"><span>Longitude:</span><strong id="debug-lon">—</strong></div>
-      <div class="debug-row"><span>Nearest Zone:</span><strong id="debug-zone">—</strong></div>
-      <div class="debug-row"><span>Cesium Entity:</span><span id="debug-entity-status" class="debug-badge green">—</span></div>
+      <div class="debug-row"><span>Development:</span><strong id="debug-dev-type">residential_compound</strong></div>
+      <div class="debug-row"><span>ID:</span><strong id="debug-dev-id">PREVIEW</strong></div>
+      <div class="debug-row"><span>Footprint:</span><strong id="debug-footprint">90m × 18m</strong></div>
+      <div class="debug-row"><span>Latitude:</span><strong id="debug-lat">30.0301° N</strong></div>
+      <div class="debug-row"><span>Longitude:</span><strong id="debug-lon">31.7406° E</strong></div>
+      <div class="debug-row"><span>Nearest Zone:</span><strong id="debug-zone">Z0054</strong></div>
+      <div class="debug-row"><span>Cesium Entity:</span><span id="debug-entity-status" class="debug-badge green">VALID (no conflicts)</span></div>
     </div>
 
     <!-- Floating Restore Sidebar Button (Visible when sidebar is collapsed) -->
