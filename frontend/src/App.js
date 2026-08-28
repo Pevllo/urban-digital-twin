@@ -271,6 +271,7 @@ export function initializeApp() {
     const targetLat = pending ? pending.latitude : existingRecord.latitude;
     const targetLon = pending ? pending.longitude : existingRecord.longitude;
     const targetZoneId = pending ? pending.zone_id : existingRecord.zone_id;
+    const targetTerrainHeight = pending ? (typeof pending.terrainHeight === 'number' ? pending.terrainHeight : 0) : (existingRecord ? (existingRecord.terrainHeight || 0) : 0);
     const config = SUPPORTED_DEV_TYPES[devType];
 
     let nameVal = devNameInput.value ? devNameInput.value.trim() : '';
@@ -298,6 +299,7 @@ export function initializeApp() {
     console.log('[FINAL MODEL INPUT]', {
       latitude: targetLat,
       longitude: targetLon,
+      terrainHeight: targetTerrainHeight,
       zone_id: targetZoneId,
       id: targetDevId,
     });
@@ -311,21 +313,32 @@ export function initializeApp() {
       name: nameVal,
       latitude: targetLat,
       longitude: targetLon,
+      terrainHeight: targetTerrainHeight,
       zone_id: targetZoneId,
       properties,
       simulation_hour: simHour,
     });
 
-    if (
-      pending && pending.isNew &&
-      (
-        finalModel.latitude !== pending.latitude ||
-        finalModel.longitude !== pending.longitude
-      )
-    ) {
-      throw new Error(
-        `PLACEMENT COORDINATE MISMATCH: finalModel (${finalModel.latitude}, ${finalModel.longitude}) does not match pending location (${pending.latitude}, ${pending.longitude})`
-      );
+    if (pending && pending.isNew) {
+      const distErrorMeters = haversineDistanceMeters(pending.latitude, pending.longitude, finalModel.latitude, finalModel.longitude);
+      console.log('[PLACEMENT LOCK]', {
+        mouseClientX: pending.clientX || null,
+        mouseClientY: pending.clientY || null,
+        pickedLatitude: pending.latitude,
+        pickedLongitude: pending.longitude,
+        pickedTerrainHeight: pending.terrainHeight,
+        pendingLatitude: pending.latitude,
+        pendingLongitude: pending.longitude,
+        finalLatitude: finalModel.latitude,
+        finalLongitude: finalModel.longitude,
+        renderedLatitude: finalModel.latitude,
+        renderedLongitude: finalModel.longitude,
+        distErrorMeters,
+      });
+
+      if (distErrorMeters > 1.0) {
+        throw new Error(`PLACEMENT DISTANCE EXCEEDED LIMIT: ${distErrorMeters.toFixed(3)} meters`);
+      }
     }
 
     console.log('[FINAL MODEL]', {

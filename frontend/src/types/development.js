@@ -146,6 +146,8 @@ export function createDevelopmentModel(raw) {
     throw new Error(`Invalid development placement coordinates: latitude=${raw.latitude}, longitude=${raw.longitude}`);
   }
 
+  const terrainHeight = (typeof raw.terrainHeight === 'number' && !Number.isNaN(raw.terrainHeight)) ? raw.terrainHeight : 0;
+
   return {
     id,
     development_id: id,
@@ -154,6 +156,7 @@ export function createDevelopmentModel(raw) {
     name: raw.name || `${spec.label} ${id}`,
     latitude: lat,
     longitude: lon,
+    terrainHeight,
     height: Number(height),
     x: Number(raw.x || 0),
     y: Number(raw.y || 0),

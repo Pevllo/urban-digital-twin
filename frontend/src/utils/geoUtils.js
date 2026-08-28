@@ -110,6 +110,10 @@ export function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+export function distanceBetweenCoordinates(lat1, lon1, lat2, lon2) {
+  return haversineDistanceMeters(lat1, lon1, lat2, lon2);
+}
+
 /**
  * Perpendicular distance in meters from point P(pLat, pLon) to line segment A(aLat, aLon) -> B(bLat, bLon).
  */
