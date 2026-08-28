@@ -38,7 +38,8 @@ export class DevelopmentRenderer {
     const rawHeight = height || buildingHeight || dims.height;
     const bldgHeight = (typeof rawHeight === 'number' && !Number.isNaN(rawHeight) && rawHeight > 0) ? rawHeight : spec.defaultDimensions.height;
 
-    const position = getBuildingPositionCartesian(lon, lat, bldgHeight);
+    const terrainHeight = (typeof devRecord.terrainHeight === 'number' && !Number.isNaN(devRecord.terrainHeight)) ? devRecord.terrainHeight : 0;
+    const position = getBuildingPositionCartesian(lon, lat, terrainHeight, bldgHeight);
     if (!position) return null;
 
     const areaSqm = length * width;
@@ -88,7 +89,7 @@ export class DevelopmentRenderer {
         material: Color.fromCssColorString(spec.color).withAlpha(0.95),
         outline: true,
         outlineColor: Color.WHITE,
-        heightReference: HeightReference.RELATIVE_TO_GROUND,
+        heightReference: HeightReference.NONE,
       },
       label: {
         text: labelText,
@@ -99,7 +100,7 @@ export class DevelopmentRenderer {
         backgroundPadding: { x: 8, y: 5 },
         verticalOrigin: VerticalOrigin.BOTTOM,
         pixelOffset: { x: 0, y: -30 },
-        heightReference: HeightReference.RELATIVE_TO_GROUND,
+        heightReference: HeightReference.NONE,
       },
     });
 

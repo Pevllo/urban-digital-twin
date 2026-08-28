@@ -359,6 +359,7 @@ export function createPlacementController(viewer, options = {}) {
             development_type: activePlacementType,
             latitude: Number(releasePick.latitude),
             longitude: Number(releasePick.longitude),
+            terrainHeight: Number(releasePick.terrainHeight || releasePick.height || 0),
             zone_id: releasePick.zone_id,
             isNew: true,
           };

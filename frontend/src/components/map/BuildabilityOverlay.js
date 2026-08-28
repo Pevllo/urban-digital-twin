@@ -45,7 +45,8 @@ export class BuildabilityOverlay {
     const previewColor = Color.fromCssColorString(fillColorHex).withAlpha(0.35);
     const outlineColor = Color.fromCssColorString(outlineColorHex);
 
-    const heightPos = getBuildingPositionCartesian(lon, lat, height);
+    const terrainHeight = (typeof picked.terrainHeight === 'number' && !Number.isNaN(picked.terrainHeight)) ? picked.terrainHeight : (picked.height || 0);
+    const heightPos = getBuildingPositionCartesian(lon, lat, terrainHeight, height);
     if (!heightPos) return;
 
     // Render ONLY ONE 3D Translucent Wireframe Preview Volume (No floating Cesium label, no duplicate box)
@@ -62,7 +63,7 @@ export class BuildabilityOverlay {
           material: previewColor,
           outline: true,
           outlineColor: outlineColor,
-          heightReference: HeightReference.RELATIVE_TO_GROUND,
+          heightReference: HeightReference.NONE,
         },
       });
 

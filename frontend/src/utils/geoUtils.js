@@ -149,10 +149,11 @@ export function metricPointToSegmentDistance(px, py, ax, ay, bx, by) {
 
 /**
  * Unified building Cartesian position generator.
- * Position is calculated at height / 2 with HeightReference.RELATIVE_TO_GROUND
- * so the base of the building volume rests precisely on the terrain surface.
+ * Absolute WGS84 ECEF position calculated at terrainHeight + (buildingHeight / 2)
+ * so the base of the building volume rests precisely on the terrain surface
+ * with HeightReference.NONE (preventing camera movement from shifting the entity).
  */
-export function getBuildingPositionCartesian(longitude, latitude, buildingHeight = 0.0) {
+export function getBuildingPositionCartesian(longitude, latitude, terrainHeight = 0.0, buildingHeight = 0.0) {
   if (
     typeof longitude !== 'number' ||
     typeof latitude !== 'number' ||
@@ -161,12 +162,13 @@ export function getBuildingPositionCartesian(longitude, latitude, buildingHeight
   ) {
     return null;
   }
-  const h = (typeof buildingHeight === 'number' && !Number.isNaN(buildingHeight) && buildingHeight > 0)
+  const groundElevation = (typeof terrainHeight === 'number' && !Number.isNaN(terrainHeight)) ? terrainHeight : 0.0;
+  const bldgH = (typeof buildingHeight === 'number' && !Number.isNaN(buildingHeight) && buildingHeight > 0)
     ? buildingHeight
     : 0.0;
 
-  // Center elevation at h / 2 meters above ground level
-  return Cartesian3.fromDegrees(longitude, latitude, h / 2.0);
+  // Center elevation at groundElevation + (bldgH / 2) meters in absolute WGS84 ECEF space
+  return Cartesian3.fromDegrees(longitude, latitude, groundElevation + (bldgH / 2.0));
 }
 
 /**
