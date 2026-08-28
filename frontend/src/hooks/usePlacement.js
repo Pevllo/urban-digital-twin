@@ -327,6 +327,12 @@ export function createPlacementController(viewer, options = {}) {
 
     // If released over map canvas at a valid coordinate:
     if (releasePick) {
+      console.log('[PLACEMENT CLICK]', {
+        latitude: releasePick.latitude,
+        longitude: releasePick.longitude,
+        zone_id: releasePick.zone_id,
+      });
+
       const existingDevs = devStore
         .getAllDevelopments()
         .filter((d) => d.id !== movingDevId && d.development_id !== movingDevId);
@@ -363,6 +369,13 @@ export function createPlacementController(viewer, options = {}) {
             zone_id: releasePick.zone_id,
             isNew: true,
           };
+
+          console.log('[PENDING LOCATION]', {
+            latitude: pendingPlacementLocation.latitude,
+            longitude: pendingPlacementLocation.longitude,
+            zone_id: pendingPlacementLocation.zone_id,
+            id: pendingPlacementLocation.id,
+          });
 
           placementState = PLACEMENT_STATES.AWAITING_CONFIGURATION;
           buildabilityOverlay.clearPreview();

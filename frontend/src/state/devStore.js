@@ -15,6 +15,13 @@ export class DevelopmentStore {
   }
 
   notify() {
+    console.log('[STORE STATE]', this.getAllDevelopments().map(d => ({
+      id: d.id,
+      latitude: d.latitude,
+      longitude: d.longitude,
+      zone_id: d.zone_id,
+    })));
+
     for (const listener of this.listeners) {
       try {
         listener(this.getAllDevelopments());
@@ -54,6 +61,11 @@ export class DevelopmentStore {
     const normalized = createDevelopmentModel({ ...devData, id: devId, development_id: devId });
 
     this.developments.set(devId, normalized);
+    const stored = this.getDevelopment(devId);
+    if (!stored || stored.latitude !== normalized.latitude || stored.longitude !== normalized.longitude) {
+      throw new Error(`DEV STORE CORRUPTION: Stored coordinates for ${devId} do not match normalized model.`);
+    }
+
     this.notify();
     return normalized;
   }

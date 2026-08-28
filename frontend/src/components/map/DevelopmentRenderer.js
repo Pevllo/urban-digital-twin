@@ -42,6 +42,20 @@ export class DevelopmentRenderer {
     const position = getBuildingPositionCartesian(lon, lat, terrainHeight, bldgHeight);
     if (!position) return null;
 
+    console.log('[RENDER INPUT]', {
+      id: devId,
+      latitude: devRecord.latitude,
+      longitude: devRecord.longitude,
+      zone_id,
+    });
+
+    console.log('[CESIUM POSITION]', {
+      id: devId,
+      latitude: lat,
+      longitude: lon,
+      position,
+    });
+
     const areaSqm = length * width;
     const areaHa = (areaSqm / 10000).toFixed(2);
     const areaLabel = `${areaSqm.toLocaleString()} m² (${areaHa} ha)`;
@@ -136,6 +150,12 @@ export class DevelopmentRenderer {
   }
 
   syncAll(developmentsList) {
+    console.log('[SYNC]', developmentsList.map(dev => ({
+      id: dev.id || dev.development_id,
+      latitude: dev.latitude,
+      longitude: dev.longitude,
+    })));
+
     const currentIds = new Set(developmentsList.map(d => d.id || d.development_id));
 
     // Remove obsolete

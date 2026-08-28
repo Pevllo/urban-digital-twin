@@ -136,9 +136,14 @@ export function createDevelopmentModel(raw) {
     floors = Math.max(4, Math.round(height / 3.5));
   }
 
-  const area = width * length;
-
   const id = raw.id || raw.development_id || 'DEV-000';
+
+  const lat = Number(raw.latitude);
+  const lon = Number(raw.longitude);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    throw new Error(`Invalid development placement coordinates: latitude=${raw.latitude}, longitude=${raw.longitude}`);
+  }
 
   return {
     id,
@@ -146,8 +151,8 @@ export function createDevelopmentModel(raw) {
     type: typeKey,
     development_type: typeKey,
     name: raw.name || `${spec.label} ${id}`,
-    latitude: Number(raw.latitude || 0),
-    longitude: Number(raw.longitude || 0),
+    latitude: lat,
+    longitude: lon,
     height: Number(height),
     x: Number(raw.x || 0),
     y: Number(raw.y || 0),

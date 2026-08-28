@@ -295,6 +295,13 @@ export function initializeApp() {
       return;
     }
 
+    console.log('[FINAL MODEL INPUT]', {
+      latitude: targetLat,
+      longitude: targetLon,
+      zone_id: targetZoneId,
+      id: targetDevId,
+    });
+
     // Perform final buildability re-validation against LOCKED coordinates
     const existingDevs = devStore.getAllDevelopments().filter(d => d.id !== targetDevId && d.development_id !== targetDevId);
     const finalModel = createDevelopmentModel({
@@ -307,6 +314,25 @@ export function initializeApp() {
       zone_id: targetZoneId,
       properties,
       simulation_hour: simHour,
+    });
+
+    if (
+      pending && pending.isNew &&
+      (
+        finalModel.latitude !== pending.latitude ||
+        finalModel.longitude !== pending.longitude
+      )
+    ) {
+      throw new Error(
+        `PLACEMENT COORDINATE MISMATCH: finalModel (${finalModel.latitude}, ${finalModel.longitude}) does not match pending location (${pending.latitude}, ${pending.longitude})`
+      );
+    }
+
+    console.log('[FINAL MODEL]', {
+      latitude: finalModel.latitude,
+      longitude: finalModel.longitude,
+      zone_id: finalModel.zone_id,
+      id: finalModel.id,
     });
 
     const finalBuildability = validateBuildability(
@@ -332,6 +358,13 @@ export function initializeApp() {
     }
 
     if (record) {
+      console.log('[STORE AFTER ADD]', {
+        latitude: record.latitude,
+        longitude: record.longitude,
+        zone_id: record.zone_id,
+        id: record.id,
+      });
+
       developmentRenderer.renderDevelopment(record);
       scenarioState.setSelectedDevForSim(record.id);
       refreshDevList();
