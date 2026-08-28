@@ -531,6 +531,7 @@ export function initializeApp() {
       placementLegend,
       placementBanner,
       bannerText,
+      SUPPORTED_DEV_TYPES,
     });
 
     placementController.initScreenEvents();
@@ -649,7 +650,7 @@ export function initializeApp() {
 
     // 4. Render Development Palette Cards
     renderPaletteCards(devCardsContainer, (typeKey, spec, event) => {
-      placementController.startPlacement(typeKey, spec, event);
+      placementController.startPlacement(typeKey, spec, 'CLICK_TO_PLACE');
       if (placementBanner) placementBanner.classList.remove('hidden');
       if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
     });

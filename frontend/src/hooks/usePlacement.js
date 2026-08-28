@@ -2,6 +2,13 @@ import { ScreenSpaceEventHandler, ScreenSpaceEventType } from 'cesium';
 import { pickGeographicLocation } from '../utils/geoUtils.js';
 import { validateBuildability } from '../utils/buildabilityEngine.js';
 
+export const INTERACTION_MODES = {
+  NONE: 'NONE',
+  CLICK_TO_PLACE: 'CLICK_TO_PLACE',
+  DRAG_TO_PLACE: 'DRAG_TO_PLACE',
+  MOVE_EXISTING: 'MOVE_EXISTING',
+};
+
 export const PLACEMENT_STATES = {
   IDLE: 'IDLE',
   PLACEMENT_ACTIVE: 'PLACEMENT_ACTIVE',
@@ -26,11 +33,13 @@ export function createPlacementController(viewer, options = {}) {
     placementLegend = null,
     placementBanner = null,
     bannerText = null,
+    SUPPORTED_DEV_TYPES = {},
   } = options;
 
   let placementState = PLACEMENT_STATES.IDLE;
+  let placementInteractionMode = INTERACTION_MODES.NONE;
   let activePlacementType = null;
-  let isDraggingFromSidebar = false;
+  let dragStarted = false;
   let movingDevId = null;
   let pendingPlacementLocation = null;
   let screenHandler = null;
@@ -43,6 +52,12 @@ export function createPlacementController(viewer, options = {}) {
 
     // Single Left Click handler: Repositioning, Click-to-place, or Entity Selection
     screenHandler.setInputAction((click) => {
+      console.log('[PLACEMENT EVENT] LEFT_CLICK', {
+        state: placementState,
+        mode: placementInteractionMode,
+        movingDevId,
+      });
+
       // If modal is currently open configuring properties, ignore map clicks
       if (
         placementState === PLACEMENT_STATES.AWAITING_CONFIGURATION ||
@@ -104,7 +119,9 @@ export function createPlacementController(viewer, options = {}) {
       if (
         activePlacementType &&
         (placementState === PLACEMENT_STATES.PLACEMENT_ACTIVE ||
-          placementState === PLACEMENT_STATES.PREVIEWING)
+          placementState === PLACEMENT_STATES.PREVIEWING) &&
+        (placementInteractionMode === INTERACTION_MODES.CLICK_TO_PLACE ||
+          placementInteractionMode === INTERACTION_MODES.NONE)
       ) {
         const picked = pickGeographicLocation(
           viewer,
@@ -114,6 +131,12 @@ export function createPlacementController(viewer, options = {}) {
         );
 
         if (picked) {
+          console.log('[PLACEMENT CLICK]', {
+            latitude: picked.latitude,
+            longitude: picked.longitude,
+            zone_id: picked.zone_id,
+          });
+
           const existingDevs = devStore.getAllDevelopments();
           const validation = validateBuildability(
             picked.latitude,
@@ -130,19 +153,37 @@ export function createPlacementController(viewer, options = {}) {
               development_type: activePlacementType,
               latitude: Number(picked.latitude),
               longitude: Number(picked.longitude),
+              terrainHeight: Number(picked.terrainHeight || picked.height || 0),
               zone_id: picked.zone_id,
               isNew: true,
             };
+
+            console.log('[PENDING LOCATION]', {
+              latitude: pendingPlacementLocation.latitude,
+              longitude: pendingPlacementLocation.longitude,
+              zone_id: pendingPlacementLocation.zone_id,
+              id: pendingPlacementLocation.id,
+            });
+
+            console.log('[PLACEMENT STATE TRANSITION]', {
+              from: placementState,
+              to: PLACEMENT_STATES.AWAITING_CONFIGURATION,
+              type: activePlacementType,
+              pendingId: pendingPlacementLocation.id,
+            });
 
             // Transition state to AWAITING_CONFIGURATION and freeze/clear preview
             placementState = PLACEMENT_STATES.AWAITING_CONFIGURATION;
             buildabilityOverlay.clearPreview();
 
+            if (infoCardElements.card) infoCardElements.card.classList.add('hidden');
+            if (placementLegend) placementLegend.classList.add('hidden');
+
             if (onOpenPropertiesModal) {
               onOpenPropertiesModal({ ...pendingPlacementLocation });
             }
           } else if (onStatusUpdate) {
-            onStatusUpdate(`Invalid placement location: ${validation.reason}`);
+            onStatusUpdate(`Cannot place building here: ${validation.reason || validation.conflictType}`);
           }
         }
         return;
@@ -177,19 +218,40 @@ export function createPlacementController(viewer, options = {}) {
     }, ScreenSpaceEventType.LEFT_CLICK);
   }
 
-  function startPlacement(typeKey, spec, event) {
+  function startPlacement(typeKey, spec, mode = INTERACTION_MODES.CLICK_TO_PLACE) {
     // Teardown any lingering placement session first
     cancelPlacementMode();
 
+    const prevState = placementState;
     placementState = PLACEMENT_STATES.PLACEMENT_ACTIVE;
     activePlacementType = typeKey;
-    isDraggingFromSidebar = true;
+    placementInteractionMode = mode || INTERACTION_MODES.CLICK_TO_PLACE;
+    dragStarted = (mode === INTERACTION_MODES.DRAG_TO_PLACE);
+
+    console.log('[PLACEMENT STATE TRANSITION]', {
+      from: prevState,
+      to: placementState,
+      type: activePlacementType,
+      mode: placementInteractionMode,
+      dragStarted,
+    });
+
     if (onStatusUpdate) {
       onStatusUpdate(`PLACEMENT MODE ACTIVE — Move footprint over 3D map to place ${spec.label}`);
     }
   }
 
   function handlePointerMove(e) {
+    // If user presses mouse down on sidebar card and starts dragging onto map, convert mode to DRAG_TO_PLACE
+    if (
+      placementInteractionMode === INTERACTION_MODES.CLICK_TO_PLACE &&
+      e.buttons === 1 &&
+      (placementState === PLACEMENT_STATES.PLACEMENT_ACTIVE || placementState === PLACEMENT_STATES.PREVIEWING)
+    ) {
+      placementInteractionMode = INTERACTION_MODES.DRAG_TO_PLACE;
+      dragStarted = true;
+    }
+
     // ONLY update preview when placement or repositioning is active.
     // NEVER mutate devStore or permanent entities during mouse move.
     if (
@@ -209,7 +271,15 @@ export function createPlacementController(viewer, options = {}) {
     );
 
     if (picked) {
-      placementState = PLACEMENT_STATES.PREVIEWING;
+      if (placementState !== PLACEMENT_STATES.PREVIEWING) {
+        console.log('[PLACEMENT STATE TRANSITION]', {
+          from: placementState,
+          to: PLACEMENT_STATES.PREVIEWING,
+          type: activePlacementType,
+          mode: placementInteractionMode,
+        });
+        placementState = PLACEMENT_STATES.PREVIEWING;
+      }
 
       const existingDevs = devStore
         .getAllDevelopments()
@@ -231,7 +301,7 @@ export function createPlacementController(viewer, options = {}) {
       // ONLY update the temporary preview entity
       buildabilityOverlay.updatePreview(picked, activePlacementType);
 
-      const spec = SUPPORTED_DEV_TYPES[activePlacementType] || SUPPORTED_DEV_TYPES.residential_compound;
+      const spec = SUPPORTED_DEV_TYPES[activePlacementType] || SUPPORTED_DEV_TYPES.residential_compound || { label: activePlacementType, defaultDimensions: { width: 10, length: 10, height: 3 } };
       const collision = picked.collision || { valid: true };
       const dims = collision.dimensions || spec.defaultDimensions;
       const width = dims.width || spec.defaultDimensions.width;
@@ -307,14 +377,37 @@ export function createPlacementController(viewer, options = {}) {
   }
 
   function handlePointerUp(e) {
-    if (!isDraggingFromSidebar) return;
-    isDraggingFromSidebar = false;
+    console.log('[PLACEMENT EVENT] POINTER_UP', {
+      state: placementState,
+      mode: placementInteractionMode,
+      dragStarted,
+    });
+
+    // ONLY handle release if an actual DRAG_TO_PLACE drag was initiated
+    if (placementInteractionMode !== INTERACTION_MODES.DRAG_TO_PLACE || !dragStarted) {
+      return;
+    }
+    dragStarted = false;
 
     if (
       (placementState !== PLACEMENT_STATES.PLACEMENT_ACTIVE &&
         placementState !== PLACEMENT_STATES.PREVIEWING) ||
       !activePlacementType
     ) {
+      return;
+    }
+
+    // Check if pointerup occurred over map canvas
+    const canvas = viewer?.scene?.canvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (
+      e.clientX < rect.left ||
+      e.clientX > rect.right ||
+      e.clientY < rect.top ||
+      e.clientY > rect.bottom
+    ) {
+      // Released outside map canvas (e.g. over sidebar): DO NOT cancel placement mode!
       return;
     }
 
@@ -377,6 +470,13 @@ export function createPlacementController(viewer, options = {}) {
             id: pendingPlacementLocation.id,
           });
 
+          console.log('[PLACEMENT STATE TRANSITION]', {
+            from: placementState,
+            to: PLACEMENT_STATES.AWAITING_CONFIGURATION,
+            type: activePlacementType,
+            pendingId: pendingPlacementLocation.id,
+          });
+
           placementState = PLACEMENT_STATES.AWAITING_CONFIGURATION;
           buildabilityOverlay.clearPreview();
 
@@ -393,18 +493,36 @@ export function createPlacementController(viewer, options = {}) {
     }
   }
 
+  function setMovingId(devId) {
+    cancelPlacementMode();
+    const devRecord = devStore.getDevelopment(devId);
+    if (!devRecord) return;
+
+    placementState = PLACEMENT_STATES.PLACEMENT_ACTIVE;
+    placementInteractionMode = INTERACTION_MODES.MOVE_EXISTING;
+    activePlacementType = devRecord.development_type || 'hospital';
+    movingDevId = devId;
+
+    console.log('[PLACEMENT STATE TRANSITION]', {
+      from: PLACEMENT_STATES.IDLE,
+      to: PLACEMENT_STATES.PLACEMENT_ACTIVE,
+      movingDevId,
+      mode: INTERACTION_MODES.MOVE_EXISTING,
+    });
+  }
+
   function cancelPlacementMode() {
     console.log('[PLACEMENT STATE TRANSITION]', {
       from: placementState,
       to: PLACEMENT_STATES.IDLE,
-      activePlacementType,
-      movingDevId,
-      pendingPlacementLocation,
+      type: activePlacementType,
+      mode: placementInteractionMode,
     });
 
     placementState = PLACEMENT_STATES.IDLE;
+    placementInteractionMode = INTERACTION_MODES.NONE;
     activePlacementType = null;
-    isDraggingFromSidebar = false;
+    dragStarted = false;
     movingDevId = null;
     pendingPlacementLocation = null;
 
@@ -423,9 +541,6 @@ export function createPlacementController(viewer, options = {}) {
     }
   }
 
-  function getPendingLocation() {
-    return pendingPlacementLocation ? { ...pendingPlacementLocation } : null;
-  }
 
   function getState() {
     return placementState;
