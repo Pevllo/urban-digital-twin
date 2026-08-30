@@ -4,3 +4,12 @@
   width: 100%;
   height: 100%;
 }
+
+.cesium-map .cesium-viewer {
+  width: 100%;
+  height: 100%;
+}
+
+.cesium-map .cesium-widget-credits {
+  font-size: 10px;
+}
