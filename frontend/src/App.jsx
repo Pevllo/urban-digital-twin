@@ -1,4 +1,5 @@
 import CesiumMap from "./components/map/CesiumMap";
+import { useState } from "react";
 import {
   BarChart3,
   Building2,
@@ -33,6 +34,8 @@ const tools = [
 ];
 
 function App() {
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [selectedRoad, setSelectedRoad] = useState(null);
   return (
     <div className="app">
       {/* Sidebar */}
@@ -208,7 +211,16 @@ function App() {
               </div>
 
               <div className="map-placeholder">
-                <CesiumMap />
+                <CesiumMap
+                  onBuildingSelect={(building) => {
+                    setSelectedBuilding(building);
+                    setSelectedRoad(null);
+                  }}
+                  onRoadSelect={(road) => {
+                    setSelectedRoad(road);
+                    setSelectedBuilding(null);
+                  }}
+                />
 
                 <div className="map-badge">
                   <span className="status-dot" />
@@ -226,18 +238,108 @@ function App() {
                 </div>
               </div>
 
-              <div className="empty-state">
-                <div className="empty-icon">
-                  <Building2 size={24} />
+              {selectedBuilding ? (
+                <div className="building-details">
+                  <div className="selected-object-header">
+                    <div className="empty-icon">
+                      <Building2 size={24} />
+                    </div>
+
+                    <div>
+                      <span className="eyebrow">BUILDING</span>
+                      <h4>
+                        {selectedBuilding.name ||
+                          `Building ${selectedBuilding.id.replace("bldg_", "")}`}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="property-list">
+                    <div className="property">
+                      <span>ID</span>
+                      <strong>{selectedBuilding.id}</strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Type</span>
+                      <strong>{selectedBuilding.building}</strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Latitude</span>
+                      <strong>
+                        {selectedBuilding.centroid[0].toFixed(6)}
+                      </strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Longitude</span>
+                      <strong>
+                        {selectedBuilding.centroid[1].toFixed(6)}
+                      </strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Radius</span>
+                      <strong>
+                        {selectedBuilding.radius.toFixed(1)} m
+                      </strong>
+                    </div>
+                  </div>
                 </div>
+              ) : selectedRoad ? (
+                <div className="road-details">
+                  <div className="selected-object-header">
+                    <div className="empty-icon">
+                      <Map size={24} />
+                    </div>
 
-                <h4>No object selected</h4>
+                    <div>
+                      <span className="eyebrow">ROAD</span>
+                      <h4>
+                        {selectedRoad.name ||
+                          `Road ${selectedRoad.id.replace("way_", "")}`}
+                      </h4>
+                    </div>
+                  </div>
 
-                <p>
-                  Select a building, road, or city element on the map to
-                  inspect its properties.
-                </p>
-              </div>
+                  <div className="property-list">
+                    <div className="property">
+                      <span>ID</span>
+                      <strong>{selectedRoad.id}</strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Classification</span>
+                      <strong>{selectedRoad.highway}</strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Name</span>
+                      <strong>{selectedRoad.name || "Unnamed"}</strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Coordinates</span>
+                      <strong>
+                        {selectedRoad.coordinates.length} points
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-icon">
+                    <Building2 size={24} />
+                  </div>
+
+                  <h4>No object selected</h4>
+
+                  <p>
+                    Select a building, road, or city element on the map to inspect its properties.
+                  </p>
+                </div>
+              )}
             </aside>
           </div>
 

@@ -4,7 +4,7 @@ import {
   OpenStreetMapImageryProvider,
   ImageryLayer,
   Cartesian3,
-  Math as CesiumMath,  
+  Math as CesiumMath,
   Color,
   ScreenSpaceEventType,
 } from "cesium";
@@ -14,9 +14,17 @@ import "./CesiumMap.css";
 
 import spatialData from "../../data/spatialFeatures.json";
 
-function CesiumMap() {
+function CesiumMap({ onBuildingSelect, onRoadSelect }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
+
+  const buildingSelectRef = useRef(onBuildingSelect);
+  const roadSelectRef = useRef(onRoadSelect); 
+
+  useEffect(() => {
+  buildingSelectRef.current = onBuildingSelect;
+  roadSelectRef.current = onRoadSelect;
+}, [onBuildingSelect, onRoadSelect]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -91,9 +99,7 @@ function CesiumMap() {
 
         polygon: {
           hierarchy: positions,
-
           height: 0,
-
           extrudedHeight: height,
 
           material: Color.fromCssColorString(
@@ -141,11 +147,8 @@ function CesiumMap() {
 
         polyline: {
           positions,
-
           width: getRoadWidth(road.highway),
-
           material: getRoadColor(road.highway),
-
           clampToGround: true,
         },
 
@@ -161,15 +164,13 @@ function CesiumMap() {
     // BUILDING SELECTION
     // --------------------------------------------------
 
-    const handler =
-      viewer.screenSpaceEventHandler;
+    const handler = viewer.screenSpaceEventHandler;
 
     handler.setInputAction(
       (movement) => {
-        const picked =
-          viewer.scene.pick(
-            movement.position
-          );
+        const picked = viewer.scene.pick(
+          movement.position
+        );
 
         if (!picked || !picked.id) {
           viewer.selectedEntity = undefined;
@@ -184,11 +185,27 @@ function CesiumMap() {
         ) {
           viewer.selectedEntity = entity;
 
-          console.log(
-            "Selected building:",
-            entity.id,
-            entity.properties
+          const building = spatialData.buildings.find(
+            (item) => item.id === entity.id
           );
+
+          if (building && buildingSelectRef.current) {
+            buildingSelectRef.current(building);
+          } 
+        }
+        if (
+          entity.properties?.type?.getValue() ===
+          "road"
+        ) {
+          viewer.selectedEntity = entity;
+
+          const road = spatialData.roads.find(
+            (item) => item.id === entity.id
+          );
+
+          if (road && roadSelectRef.current) {
+            roadSelectRef.current(road);
+            }
         }
       },
       ScreenSpaceEventType.LEFT_CLICK

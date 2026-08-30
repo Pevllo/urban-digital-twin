@@ -639,3 +639,43 @@ button {
     gap: 15px;
   }
 }
+.building-details {
+  padding: 24px;
+}
+
+.selected-object-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.selected-object-header h4 {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+
+.property-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.property {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.property span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.property strong {
+  font-size: 12px;
+  text-align: right;
+  word-break: break-word;
+}
