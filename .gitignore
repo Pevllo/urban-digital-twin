@@ -1,4 +1,4 @@
-﻿# Python / Cache files
+# Python / Cache files
 __pycache__/
 *.py[cod]
 *.class
@@ -9,6 +9,9 @@ __pycache__/
 venv/
 env/
 ENV/
+
+# Node dependencies
+node_modules/
 
 # IDE / OS files
 .vscode/
