@@ -625,47 +625,23 @@ export function initializeApp() {
     }
   }
 
-  const infoCardElements = {
-    card: document.getElementById('placement-info-card'),
-    icon: document.getElementById('info-card-icon'),
-    title: document.getElementById('info-card-title'),
-    badge: document.getElementById('info-card-status-badge'),
-    footprint: document.getElementById('info-card-footprint'),
-    area: document.getElementById('info-card-area'),
-    height: document.getElementById('info-card-height'),
-    storeys: document.getElementById('info-card-storeys'),
-    footer: document.getElementById('info-card-status-footer'),
-    statusIcon: document.getElementById('info-card-status-icon'),
-    statusText: document.getElementById('info-card-status-text'),
-  };
+  // ----------------------------------------------------
+  // PHASE A: IMMMEDIATE DEFENSIVE UI INITIALIZATION
+  // Registers all non-3D UI event handlers synchronously
+  // so the application UI remains fully functional even if
+  // 3D Cesium loading experiences an issue.
+  // ----------------------------------------------------
 
-  const placementLegend = document.getElementById('placement-legend');
+  function safeRegister(fn, name) {
+    try {
+      fn();
+    } catch (err) {
+      console.warn(`[UI Init Safeguard] Failed during ${name}:`, err);
+    }
+  }
 
-  // Initialize Cesium 3D Viewer & Controllers
-  createCesiumViewer('cesiumContainer', updateStatus).then((v) => {
-    viewer = v;
-    window.cesiumViewer = viewer;
-
-    buildabilityOverlay = new BuildabilityOverlay(viewer);
-    developmentRenderer = new DevelopmentRenderer(viewer);
-
-    placementController = createPlacementController(viewer, {
-      devStore,
-      buildabilityOverlay,
-      developmentRenderer,
-      onOpenPropertiesModal: openModal,
-      onStatusUpdate: updateStatus,
-      debugElements,
-      infoCardElements,
-      placementLegend,
-      placementBanner,
-      bannerText,
-      SUPPORTED_DEV_TYPES,
-    });
-
-    placementController.initScreenEvents();
-
-    // 1. Navigation Tab View Switcher
+  // 1. Navigation & View Switcher UI
+  safeRegister(() => {
     const navTabs = document.querySelectorAll('.nav-tab');
     navTabs.forEach((tab) => {
       tab.addEventListener('click', () => {
@@ -674,7 +650,6 @@ export function initializeApp() {
       });
     });
 
-    // 2. Hamburger Dropdown Menu Handlers
     if (btnHamburgerMenu && hamburgerDropdown) {
       btnHamburgerMenu.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -688,7 +663,7 @@ export function initializeApp() {
 
     if (menuToggleSidebar) {
       menuToggleSidebar.addEventListener('click', () => {
-        const isCollapsed = sidebar ? sidebar.classList.contains('collapsed') : false;
+        const isCollapsed = document.querySelector('.sim-col-left')?.classList.contains('hidden');
         setSidebarCollapsed(!isCollapsed);
       });
     }
@@ -737,7 +712,18 @@ export function initializeApp() {
       });
     }
 
-    // 3. Left Panel Add Development Palette Toggle
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (placementController) placementController.cancelPlacementMode();
+        if (placementBanner) placementBanner.classList.add('hidden');
+        if (hamburgerDropdown) hamburgerDropdown.classList.add('hidden');
+        if (aboutModal) aboutModal.classList.add('hidden');
+      }
+    });
+  }, 'NavigationUI');
+
+  // 2. Development Palette & List UI
+  safeRegister(() => {
     if (btnAddDevTrigger && devPaletteContainer) {
       btnAddDevTrigger.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -754,7 +740,61 @@ export function initializeApp() {
       });
     }
 
-    // Scenario Selector Listener
+    if (devCardsContainer) {
+      renderPaletteCards(devCardsContainer, {
+        onCardPointerDown: (typeKey, spec, event) => {
+          if (placementController) placementController.handleCardPointerDown(typeKey, spec, event);
+        },
+        onCardClick: (typeKey, spec) => {
+          if (placementController) placementController.handleCardClick(typeKey, spec);
+          if (devPaletteContainer) devPaletteContainer.classList.add('hidden');
+          if (placementBanner) placementBanner.classList.remove('hidden');
+          if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
+        },
+      });
+    }
+
+    devStore.subscribe(() => {
+      if (developmentRenderer) developmentRenderer.syncAll(devStore.getAllDevelopments());
+      refreshDevList();
+    });
+
+    refreshDevList();
+  }, 'DevelopmentUI');
+
+  // 3. Modal Form & Confirmation UI
+  safeRegister(() => {
+    if (modalClose) modalClose.addEventListener('click', closeModal);
+    if (btnCancelProperties) btnCancelProperties.addEventListener('click', closeModal);
+
+    let isSubmittingConfirm = false;
+    const triggerSubmit = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      if (isSubmittingConfirm) return;
+      isSubmittingConfirm = true;
+      try {
+        handleConfirmProperties();
+      } finally {
+        isSubmittingConfirm = false;
+      }
+    };
+
+    if (propertiesForm) propertiesForm.addEventListener('submit', triggerSubmit);
+    if (btnConfirmProperties) btnConfirmProperties.addEventListener('click', triggerSubmit);
+
+    if (btnCancelPlacement) {
+      btnCancelPlacement.addEventListener('click', () => {
+        if (placementController) placementController.cancelPlacementMode();
+        if (placementBanner) placementBanner.classList.add('hidden');
+      });
+    }
+  }, 'ModalUI');
+
+  // 4. Map Layer Checkboxes & Scenario Selector UI
+  safeRegister(() => {
     const scenarioSelector = document.getElementById('scenario-selector');
     if (scenarioSelector) {
       scenarioSelector.addEventListener('change', (e) => {
@@ -763,7 +803,6 @@ export function initializeApp() {
       });
     }
 
-    // Map Layer Checkbox Handlers
     if (layerBuildings) {
       layerBuildings.addEventListener('change', (e) => {
         scenarioState.setMapLayerActive('buildings', e.target.checked);
@@ -790,10 +829,13 @@ export function initializeApp() {
     if (layerElectricity) {
       layerElectricity.addEventListener('change', (e) => {
         scenarioState.setMapLayerActive('electricity', e.target.checked);
-        developmentRenderer.syncAll(devStore.getAllDevelopments());
+        if (developmentRenderer) developmentRenderer.syncAll(devStore.getAllDevelopments());
       });
     }
+  }, 'MapLayerUI');
 
+  // 5. Simulation Control UI
+  safeRegister(() => {
     if (simDevSelect) {
       simDevSelect.addEventListener('change', () => {
         const selectedId = simDevSelect.value;
@@ -820,20 +862,46 @@ export function initializeApp() {
       });
     }
 
-    // 4. Render Development Palette Cards
-    if (devCardsContainer) {
-      renderPaletteCards(devCardsContainer, {
-        onCardPointerDown: (typeKey, spec, event) => {
-          if (placementController) placementController.handleCardPointerDown(typeKey, spec, event);
-        },
-        onCardClick: (typeKey, spec) => {
-          if (placementController) placementController.handleCardClick(typeKey, spec);
-          if (devPaletteContainer) devPaletteContainer.classList.add('hidden');
-          if (placementBanner) placementBanner.classList.remove('hidden');
-          if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
-        },
+    if (btnRunSimulation) {
+      btnRunSimulation.addEventListener('click', () => {
+        const selectedId = (simDevSelect && simDevSelect.value) ? simDevSelect.value : scenarioState.getState().selectedDevIdForSim;
+        if (selectedId) {
+          scenarioState.setSelectedDevForSim(selectedId);
+          const record = devStore.getDevelopment(selectedId);
+          if (record) handleTriggerSimulation(record);
+        }
       });
     }
+  }, 'SimulationUI');
+
+  // ----------------------------------------------------
+  // PHASE B: ASYNCHRONOUS 3D CESIUM INITIALIZATION
+  // Initializes Cesium 3D viewer, buildability overlays,
+  // 3D building renderers, and mouse pointer listeners.
+  // ----------------------------------------------------
+
+  createCesiumViewer('cesiumContainer', updateStatus).then((v) => {
+    viewer = v;
+    window.cesiumViewer = viewer;
+
+    buildabilityOverlay = new BuildabilityOverlay(viewer);
+    developmentRenderer = new DevelopmentRenderer(viewer);
+
+    placementController = createPlacementController(viewer, {
+      devStore,
+      buildabilityOverlay,
+      developmentRenderer,
+      onOpenPropertiesModal: openModal,
+      onStatusUpdate: updateStatus,
+      debugElements,
+      infoCardElements,
+      placementLegend,
+      placementBanner,
+      bannerText,
+      SUPPORTED_DEV_TYPES,
+    });
+
+    placementController.initScreenEvents();
 
     window.addEventListener('pointermove', (e) => {
       if (placementController) placementController.handlePointerMove(e);
@@ -849,72 +917,7 @@ export function initializeApp() {
       }
     });
 
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        if (placementController) placementController.cancelPlacementMode();
-        if (placementBanner) placementBanner.classList.add('hidden');
-        if (hamburgerDropdown) hamburgerDropdown.classList.add('hidden');
-        if (aboutModal) aboutModal.classList.add('hidden');
-      }
-    });
-
-    if (sidebarToggle) {
-      sidebarToggle.addEventListener('click', () => {
-        setSidebarCollapsed(true);
-      });
-    }
-
-    if (btnRestoreSidebar) {
-      btnRestoreSidebar.addEventListener('click', () => {
-        setSidebarCollapsed(false);
-      });
-    }
-
-    if (btnCancelPlacement) {
-      btnCancelPlacement.addEventListener('click', () => {
-        if (placementController) placementController.cancelPlacementMode();
-        if (placementBanner) placementBanner.classList.add('hidden');
-      });
-    }
-
-    if (modalClose) modalClose.addEventListener('click', closeModal);
-    if (btnCancelProperties) btnCancelProperties.addEventListener('click', closeModal);
-
-    let isSubmittingConfirm = false;
-    const triggerSubmit = (e) => {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      if (isSubmittingConfirm) return;
-      isSubmittingConfirm = true;
-      try {
-        handleConfirmProperties();
-      } finally {
-        isSubmittingConfirm = false;
-      }
-    };
-
-    if (propertiesForm) propertiesForm.addEventListener('submit', triggerSubmit);
-    if (btnConfirmProperties) btnConfirmProperties.addEventListener('click', triggerSubmit);
-
-    if (btnRunSimulation) {
-      btnRunSimulation.addEventListener('click', () => {
-        const selectedId = (simDevSelect && simDevSelect.value) ? simDevSelect.value : scenarioState.getState().selectedDevIdForSim;
-        if (selectedId) {
-          scenarioState.setSelectedDevForSim(selectedId);
-          const record = devStore.getDevelopment(selectedId);
-          if (record) handleTriggerSimulation(record);
-        }
-      });
-    }
-
-    devStore.subscribe(() => {
-      developmentRenderer.syncAll(devStore.getAllDevelopments());
-      refreshDevList();
-    });
-
-    refreshDevList();
+    developmentRenderer.syncAll(devStore.getAllDevelopments());
   }).catch((err) => {
     console.error('[App Init Error]:', err);
     updateStatus('Failed to load 3D Digital Twin environment.');
