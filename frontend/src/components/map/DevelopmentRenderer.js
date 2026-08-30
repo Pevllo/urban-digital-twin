@@ -172,11 +172,15 @@ export class DevelopmentRenderer {
       longitude: dev.longitude,
     })));
 
-    const currentIds = new Set(developmentsList.map(d => d.id || d.development_id));
+    const currentIds = new Set();
+    (developmentsList || []).forEach((d) => {
+      if (d.id) currentIds.add(String(d.id));
+      if (d.development_id) currentIds.add(String(d.development_id));
+    });
 
     // Remove obsolete
     for (const [id] of this.entitiesMap) {
-      if (!currentIds.has(id)) {
+      if (!currentIds.has(String(id))) {
         this.removeDevelopment(id);
       }
     }
