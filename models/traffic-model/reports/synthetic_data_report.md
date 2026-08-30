@@ -47,19 +47,19 @@ clip(volume, 0, min(12000, capacity_proxy x 1.15))
 
 | check                         | value                                      | verdict   |
 |:------------------------------|:-------------------------------------------|:----------|
-| n_road_segments_real_OSM      | 2209                                       |           |
-| n_observations_synthetic      | 1,590,480                                  |           |
+| n_road_segments_real_OSM      | 6615                                       |           |
+| n_observations_synthetic      | 4,762,800                                  |           |
 | date_range                    | 2026-01-05 00:00:00 .. 2026-02-03 23:00:00 |           |
 | volume_min                    | 4                                          | PASS      |
-| volume_max                    | 9718                                       | PASS      |
-| volume_mean_median_std        | 182 / 76 / 369                             |           |
-| mean_HIGH_hierarchy           | 1305                                       | PASS      |
-| mean_LOW_hierarchy            | 116                                        |           |
-| mean_night(02-04)             | 34                                         | PASS      |
-| mean_midday(10,11,14)         | 235                                        |           |
-| peak_hours_mean               | 283                                        | PASS      |
-| offpeak_mean                  | 140                                        |           |
-| corr(volume,capacity_proxy)   | 0.774                                      | PASS      |
-| neighbour_residual_median_r   | 0.883                                      | PASS      |
-| random_pair_residual_median_r | 0.383                                      |           |
-| weekend_vs_weekday_mean       | 160 vs 190                                 | PASS      |
+| volume_max                    | 8901                                       | PASS      |
+| volume_mean_median_std        | 259 / 116 / 437                            |           |
+| mean_HIGH_hierarchy           | 1841                                       | PASS      |
+| mean_LOW_hierarchy            | 174                                        |           |
+| mean_night(02-04)             | 48                                         | PASS      |
+| mean_midday(10,11,14)         | 336                                        |           |
+| peak_hours_mean               | 400                                        | PASS      |
+| offpeak_mean                  | 201                                        |           |
+| corr(volume,capacity_proxy)   | 0.745                                      | PASS      |
+| neighbour_residual_median_r   | 0.867                                      | PASS      |
+| random_pair_residual_median_r | 0.338                                      |           |
+| weekend_vs_weekday_mean       | 240 vs 266                                 | PASS      |

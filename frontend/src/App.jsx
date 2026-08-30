@@ -1,5 +1,5 @@
 import CesiumMap from "./components/map/CesiumMap";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   Building2,
@@ -36,6 +36,65 @@ const tools = [
 function App() {
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [selectedRoad, setSelectedRoad] = useState(null);
+  const [roadTraffic, setRoadTraffic] = useState(null);
+
+  /*
+   * Load traffic information whenever a road is selected.
+   */
+  useEffect(() => {
+    if (!selectedRoad) {
+      setRoadTraffic(null);
+      return;
+    }
+
+    const selectedId = String(selectedRoad.id || "");
+
+    if (!selectedId) {
+      setRoadTraffic(null);
+      return;
+    }
+
+    // Cesium road IDs are currently formatted as:
+    // way_90604136
+    const osmWayId = selectedId.replace(/^way_/, "");
+
+    if (!/^\d+$/.test(osmWayId)) {
+      console.warn("Invalid OSM way ID:", selectedId);
+      setRoadTraffic(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch(
+      `http://127.0.0.1:8000/api/v1/traffic/baseline?osm_way_id=${osmWayId}`
+    )
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(
+            `Traffic API returned ${response.status} for OSM way ${osmWayId}`
+          );
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setRoadTraffic(data);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("Traffic data unavailable:", error.message);
+          setRoadTraffic(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRoad]);
+
   return (
     <div className="app">
       {/* Sidebar */}
@@ -147,10 +206,12 @@ function App() {
               <div className="kpi-icon building">
                 <Building2 size={20} />
               </div>
+
               <div>
                 <span>Total Buildings</span>
                 <strong>1,284</strong>
               </div>
+
               <small>+3.2%</small>
             </div>
 
@@ -158,10 +219,12 @@ function App() {
               <div className="kpi-icon traffic">
                 <Car size={20} />
               </div>
+
               <div>
                 <span>Traffic Level</span>
                 <strong>64%</strong>
               </div>
+
               <small>Moderate</small>
             </div>
 
@@ -169,10 +232,12 @@ function App() {
               <div className="kpi-icon energy">
                 <Zap size={20} />
               </div>
+
               <div>
                 <span>Energy Demand</span>
                 <strong>18.4 MW</strong>
               </div>
+
               <small>+5.8%</small>
             </div>
 
@@ -180,10 +245,12 @@ function App() {
               <div className="kpi-icon environment">
                 <Leaf size={20} />
               </div>
+
               <div>
                 <span>CO₂ Emissions</span>
                 <strong>7.2 t/h</strong>
               </div>
+
               <small>-2.1%</small>
             </div>
           </div>
@@ -215,10 +282,12 @@ function App() {
                   onBuildingSelect={(building) => {
                     setSelectedBuilding(building);
                     setSelectedRoad(null);
+                    setRoadTraffic(null);
                   }}
                   onRoadSelect={(road) => {
                     setSelectedRoad(road);
                     setSelectedBuilding(null);
+                    setRoadTraffic(null);
                   }}
                 />
 
@@ -238,6 +307,7 @@ function App() {
                 </div>
               </div>
 
+              {/* ================= BUILDING ================= */}
               {selectedBuilding ? (
                 <div className="building-details">
                   <div className="selected-object-header">
@@ -247,9 +317,12 @@ function App() {
 
                     <div>
                       <span className="eyebrow">BUILDING</span>
+
                       <h4>
                         {selectedBuilding.name ||
-                          `Building ${selectedBuilding.id.replace("bldg_", "")}`}
+                          `Building ${String(
+                            selectedBuilding.id || ""
+                          ).replace("bldg_", "")}`}
                       </h4>
                     </div>
                   </div>
@@ -262,32 +335,39 @@ function App() {
 
                     <div className="property">
                       <span>Type</span>
-                      <strong>{selectedBuilding.building}</strong>
+                      <strong>{selectedBuilding.building || "Unknown"}</strong>
                     </div>
 
                     <div className="property">
                       <span>Latitude</span>
                       <strong>
-                        {selectedBuilding.centroid[0].toFixed(6)}
+                        {Array.isArray(selectedBuilding.centroid)
+                          ? selectedBuilding.centroid[0].toFixed(6)
+                          : "—"}
                       </strong>
                     </div>
 
                     <div className="property">
                       <span>Longitude</span>
                       <strong>
-                        {selectedBuilding.centroid[1].toFixed(6)}
+                        {Array.isArray(selectedBuilding.centroid)
+                          ? selectedBuilding.centroid[1].toFixed(6)
+                          : "—"}
                       </strong>
                     </div>
 
                     <div className="property">
                       <span>Radius</span>
                       <strong>
-                        {selectedBuilding.radius.toFixed(1)} m
+                        {typeof selectedBuilding.radius === "number"
+                          ? `${selectedBuilding.radius.toFixed(1)} m`
+                          : "—"}
                       </strong>
                     </div>
                   </div>
                 </div>
-              ) : selectedRoad ? (
+              ) : /* ================= ROAD ================= */
+              selectedRoad ? (
                 <div className="road-details">
                   <div className="selected-object-header">
                     <div className="empty-icon">
@@ -296,13 +376,17 @@ function App() {
 
                     <div>
                       <span className="eyebrow">ROAD</span>
+
                       <h4>
                         {selectedRoad.name ||
-                          `Road ${selectedRoad.id.replace("way_", "")}`}
+                          `Road ${String(
+                            selectedRoad.id || ""
+                          ).replace("way_", "")}`}
                       </h4>
                     </div>
                   </div>
 
+                  {/* Road properties */}
                   <div className="property-list">
                     <div className="property">
                       <span>ID</span>
@@ -311,7 +395,7 @@ function App() {
 
                     <div className="property">
                       <span>Classification</span>
-                      <strong>{selectedRoad.highway}</strong>
+                      <strong>{selectedRoad.highway || "Unknown"}</strong>
                     </div>
 
                     <div className="property">
@@ -322,12 +406,101 @@ function App() {
                     <div className="property">
                       <span>Coordinates</span>
                       <strong>
-                        {selectedRoad.coordinates.length} points
+                        {Array.isArray(selectedRoad.coordinates)
+                          ? `${selectedRoad.coordinates.length} points`
+                          : "—"}
                       </strong>
                     </div>
                   </div>
+
+                  {/* ================= TRAFFIC ================= */}
+                  {roadTraffic ? (
+                    <div className="traffic-details">
+                      <span className="eyebrow">TRAFFIC</span>
+
+                      <div className="property-list">
+                        <div className="property">
+                          <span>Traffic Volume</span>
+
+                          <strong>
+                            {Number(
+                              roadTraffic.traffic_volume || 0
+                            ).toLocaleString()}{" "}
+                            veh/h
+                          </strong>
+                        </div>
+
+                        <div className="property">
+                          <span>Capacity</span>
+
+                          <strong>
+                            {Number(
+                              roadTraffic.road_capacity_proxy || 0
+                            ).toLocaleString()}{" "}
+                            veh/h
+                          </strong>
+                        </div>
+
+                        <div className="property">
+                          <span>Segments</span>
+
+                          <strong>{roadTraffic.segment_count ?? "—"}</strong>
+                        </div>
+
+                        <div className="property">
+                          <span>Road Length</span>
+
+                          <strong>
+                            {typeof roadTraffic.road_length_m === "number"
+                              ? `${roadTraffic.road_length_m.toLocaleString()} m`
+                              : "—"}
+                          </strong>
+                        </div>
+
+                        <div className="property">
+                          <span>Lanes</span>
+
+                          <strong>{roadTraffic.lane_count ?? "—"}</strong>
+                        </div>
+
+                        <div className="property">
+                          <span>Speed Limit</span>
+
+                          <strong>
+                            {roadTraffic.speed_limit_kmh ?? "—"} km/h
+                          </strong>
+                        </div>
+
+                        <div className="property">
+                          <span>Hierarchy</span>
+
+                          <strong>
+                            {roadTraffic.road_hierarchy || "—"}
+                          </strong>
+                        </div>
+
+                        <div className="property">
+                          <span>Data Type</span>
+
+                          <strong>SYNTHETIC</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="traffic-unavailable">
+                      <span className="eyebrow">TRAFFIC</span>
+
+                      <p>Traffic data is unavailable for this road.</p>
+
+                      <small>
+                        This road is not included in the drivable traffic
+                        network.
+                      </small>
+                    </div>
+                  )}
                 </div>
               ) : (
+                /* ================= EMPTY ================= */
                 <div className="empty-state">
                   <div className="empty-icon">
                     <Building2 size={24} />
@@ -336,7 +509,8 @@ function App() {
                   <h4>No object selected</h4>
 
                   <p>
-                    Select a building, road, or city element on the map to inspect its properties.
+                    Select a building, road, or city element on the map to
+                    inspect its properties.
                   </p>
                 </div>
               )}
@@ -347,15 +521,15 @@ function App() {
           <section className="simulation-panel">
             <div>
               <span className="eyebrow">SIMULATION</span>
+
               <h3>What-If Scenario</h3>
+
               <p>
                 Create a scenario and evaluate its impact on the city.
               </p>
             </div>
 
-            <button className="secondary-button">
-              Open Simulator
-            </button>
+            <button className="secondary-button">Open Simulator</button>
           </section>
         </section>
       </main>

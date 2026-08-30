@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Viewer,
   OpenStreetMapImageryProvider,
@@ -19,12 +19,71 @@ function CesiumMap({ onBuildingSelect, onRoadSelect }) {
   const viewerRef = useRef(null);
 
   const buildingSelectRef = useRef(onBuildingSelect);
-  const roadSelectRef = useRef(onRoadSelect); 
+  const roadSelectRef = useRef(onRoadSelect);
+
+  const [trafficData, setTrafficData] = useState({});
+
+  // --------------------------------------------------
+  // KEEP CALLBACK REFERENCES UP TO DATE
+  // --------------------------------------------------
 
   useEffect(() => {
-  buildingSelectRef.current = onBuildingSelect;
-  roadSelectRef.current = onRoadSelect;
-}, [onBuildingSelect, onRoadSelect]);
+    buildingSelectRef.current = onBuildingSelect;
+    roadSelectRef.current = onRoadSelect;
+  }, [onBuildingSelect, onRoadSelect]);
+
+  // --------------------------------------------------
+  // LOAD TRAFFIC DATA
+  // --------------------------------------------------
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTraffic() {
+      try {
+        const response = await fetch(
+          "http://127.0.0.1:8000/api/v1/traffic/baseline/all"
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Traffic request failed: ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+
+        if (cancelled) return;
+
+        const lookup = {};
+
+        for (const road of data.roads || []) {
+          lookup[String(road.osm_way_id)] = road;
+        }
+
+        setTrafficData(lookup);
+
+        console.log(
+          `Loaded traffic data for ${Object.keys(lookup).length} OSM roads.`
+        );
+      } catch (error) {
+        console.error(
+          "Failed to load traffic data:",
+          error
+        );
+      }
+    }
+
+    loadTraffic();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // --------------------------------------------------
+  // CESIUM VIEWER
+  // --------------------------------------------------
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -95,11 +154,16 @@ function CesiumMap({ onBuildingSelect, onRoadSelect }) {
 
         name:
           building.name ||
-          `Building ${building.id.replace("bldg_", "")}`,
+          `Building ${building.id.replace(
+            "bldg_",
+            ""
+          )}`,
 
         polygon: {
           hierarchy: positions,
+
           height: 0,
+
           extrudedHeight: height,
 
           material: Color.fromCssColorString(
@@ -108,17 +172,25 @@ function CesiumMap({ onBuildingSelect, onRoadSelect }) {
 
           outline: true,
 
-          outlineColor: Color.fromCssColorString(
-            "#cbd5e1"
-          ),
+          outlineColor:
+            Color.fromCssColorString(
+              "#cbd5e1"
+            ),
         },
 
         properties: {
           type: "building",
-          buildingType: building.building,
+
+          buildingType:
+            building.building,
+
           name: building.name,
-          centroid: building.centroid,
-          radius: building.radius,
+
+          centroid:
+            building.centroid,
+
+          radius:
+            building.radius,
         },
       });
     });
@@ -130,11 +202,17 @@ function CesiumMap({ onBuildingSelect, onRoadSelect }) {
     spatialData.roads.forEach((road) => {
       const positions = [];
 
-      road.coordinates.forEach(([lat, lon]) => {
-        positions.push(
-          Cartesian3.fromDegrees(lon, lat, 2)
-        );
-      });
+      road.coordinates.forEach(
+        ([lat, lon]) => {
+          positions.push(
+            Cartesian3.fromDegrees(
+              lon,
+              lat,
+              2
+            )
+          );
+        }
+      );
 
       if (positions.length < 2) return;
 
@@ -143,69 +221,128 @@ function CesiumMap({ onBuildingSelect, onRoadSelect }) {
 
         name:
           road.name ||
-          `Road ${road.id.replace("way_", "")}`,
+          `Road ${road.id.replace(
+            "way_",
+            ""
+          )}`,
 
         polyline: {
           positions,
-          width: getRoadWidth(road.highway),
-          material: getRoadColor(road.highway),
+
+          width:
+            getRoadWidth(
+              road.highway
+            ),
+
+          material:
+            getTrafficColor(
+              trafficData[
+                String(
+                  road.id.replace("way_", "")
+                )
+              ]?.congestion_percent ?? 0
+          ),
+
           clampToGround: true,
         },
 
         properties: {
           type: "road",
-          highway: road.highway,
-          name: road.name,
+
+          highway:
+            road.highway,
+
+          name:
+            road.name,
         },
       });
     });
 
     // --------------------------------------------------
-    // BUILDING SELECTION
+    // MAP SELECTION
     // --------------------------------------------------
 
-    const handler = viewer.screenSpaceEventHandler;
+    const handler =
+      viewer.screenSpaceEventHandler;
 
     handler.setInputAction(
       (movement) => {
-        const picked = viewer.scene.pick(
-          movement.position
-        );
+        const picked =
+          viewer.scene.pick(
+            movement.position
+          );
 
-        if (!picked || !picked.id) {
-          viewer.selectedEntity = undefined;
+        // ------------------------------------------------
+        // NOTHING SELECTED
+        // ------------------------------------------------
+
+        if (
+          !picked ||
+          !picked.id
+        ) {
+          viewer.selectedEntity =
+            undefined;
+
           return;
         }
 
-        const entity = picked.id;
+        const entity =
+          picked.id;
+
+        // ------------------------------------------------
+        // BUILDING SELECTION
+        // ------------------------------------------------
 
         if (
           entity.properties?.type?.getValue() ===
           "building"
         ) {
-          viewer.selectedEntity = entity;
+          viewer.selectedEntity =
+            entity;
 
-          const building = spatialData.buildings.find(
-            (item) => item.id === entity.id
-          );
+          const building =
+            spatialData.buildings.find(
+              (item) =>
+                item.id ===
+                entity.id
+            );
 
-          if (building && buildingSelectRef.current) {
-            buildingSelectRef.current(building);
-          } 
+          if (
+            building &&
+            buildingSelectRef.current
+          ) {
+            buildingSelectRef.current(
+              building
+            );
+          }
         }
+
+        // ------------------------------------------------
+        // ROAD SELECTION
+        // ------------------------------------------------
+
         if (
           entity.properties?.type?.getValue() ===
           "road"
         ) {
-          viewer.selectedEntity = entity;
+          viewer.selectedEntity =
+            entity;
 
-          const road = spatialData.roads.find(
-            (item) => item.id === entity.id
-          );
+          const road =
+            spatialData.roads.find(
+              (item) =>
+                item.id ===
+                entity.id
+            );
 
-          if (road && roadSelectRef.current) {
-            roadSelectRef.current(road);
-            }
+          if (
+            road &&
+            roadSelectRef.current
+          ) {
+            roadSelectRef.current(
+              road
+            );
+          }
         }
       },
       ScreenSpaceEventType.LEFT_CLICK
@@ -216,13 +353,19 @@ function CesiumMap({ onBuildingSelect, onRoadSelect }) {
     // --------------------------------------------------
 
     return () => {
-      if (!viewer.isDestroyed()) {
+      if (
+        !viewer.isDestroyed()
+      ) {
         viewer.destroy();
       }
 
       viewerRef.current = null;
     };
   }, []);
+
+  // --------------------------------------------------
+  // MAP CONTAINER
+  // --------------------------------------------------
 
   return (
     <div
@@ -233,7 +376,7 @@ function CesiumMap({ onBuildingSelect, onRoadSelect }) {
 }
 
 // --------------------------------------------------
-// ROAD VISUALIZATION
+// ROAD WIDTH
 // --------------------------------------------------
 
 function getRoadWidth(highway) {
@@ -267,34 +410,67 @@ function getRoadWidth(highway) {
   }
 }
 
+// --------------------------------------------------
+// ROAD COLOR
+// --------------------------------------------------
+
 function getRoadColor(highway) {
   switch (highway) {
     case "motorway":
     case "motorway_link":
-      return Color.fromCssColorString("#f97316");
+      return Color.fromCssColorString(
+        "#f97316"
+      );
 
     case "trunk":
     case "trunk_link":
-      return Color.fromCssColorString("#f59e0b");
+      return Color.fromCssColorString(
+        "#f59e0b"
+      );
 
     case "primary":
     case "primary_link":
-      return Color.fromCssColorString("#eab308");
+      return Color.fromCssColorString(
+        "#eab308"
+      );
 
     case "secondary":
     case "secondary_link":
-      return Color.fromCssColorString("#94a3b8");
+      return Color.fromCssColorString(
+        "#94a3b8"
+      );
 
     case "tertiary":
     case "tertiary_link":
-      return Color.fromCssColorString("#64748b");
+      return Color.fromCssColorString(
+        "#64748b"
+      );
 
     case "construction":
-      return Color.fromCssColorString("#ef4444");
+      return Color.fromCssColorString(
+        "#ef4444"
+      );
 
     default:
-      return Color.fromCssColorString("#475569");
+      return Color.fromCssColorString(
+        "#475569"
+      );
   }
 }
+ 
+function getTrafficColor(congestionPercent) {
+  if (congestionPercent < 5.5) {
+    return Color.fromCssColorString("#22c55e");
+  }
 
+  if (congestionPercent < 8.3) {
+    return Color.fromCssColorString("#eab308");
+  }
+
+  if (congestionPercent < 11.25) {
+    return Color.fromCssColorString("#f97316");
+  }
+
+  return Color.fromCssColorString("#ef4444");
+}
 export default CesiumMap;
