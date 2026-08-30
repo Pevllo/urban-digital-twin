@@ -2,6 +2,7 @@ import { Cartesian3 } from 'cesium';
 import { createCesiumViewer } from './components/map/MapContainer.js';
 import { BuildabilityOverlay } from './components/map/BuildabilityOverlay.js';
 import { DevelopmentRenderer } from './components/map/DevelopmentRenderer.js';
+import { setBuildingsVisible, setTrafficVisible } from './components/map/MapLayers.js';
 import { DevelopmentStore, SUPPORTED_DEV_TYPES } from './state/devStore.js';
 import { scenarioState } from './state/scenarioState.js';
 import { renderPaletteCards } from './components/development/Palette.js';
@@ -33,7 +34,7 @@ export function initializeApp() {
   let developmentRenderer = null;
   let placementController = null;
   let editingDevId = null;
-  let currentView = 'map';
+  let currentView = 'map'; window.getScenarioState = () => scenarioState.getState();
 
   // DOM Elements — Header & Navigation
   const statusEl = document.getElementById('status-message');
@@ -41,26 +42,37 @@ export function initializeApp() {
   const badgeAreaName = document.getElementById('badge-area-name');
   const btnHamburgerMenu = document.getElementById('btn-hamburger-menu');
   const hamburgerDropdown = document.getElementById('hamburger-dropdown');
-  const menuToggleSidebar = document.getElementById('menu-toggle-sidebar');
   const menuResetCamera = document.getElementById('menu-reset-camera');
   const menuToggleDebug = document.getElementById('menu-toggle-debug');
   const menuToggleBuildable = document.getElementById('menu-toggle-buildable');
   const menuAbout = document.getElementById('menu-about');
-
-  // DOM Elements — Sidebar & Panels
-  const sidebar = document.getElementById('sidebar-dashboard');
+  const menuToggleSidebar = document.getElementById('menu-toggle-sidebar');
   const sidebarToggle = document.getElementById('sidebar-toggle');
   const btnRestoreSidebar = document.getElementById('btn-restore-sidebar');
-  const sidebarPanelTitle = document.getElementById('sidebar-panel-title');
-  const studyAreaTitle = document.getElementById('study-area-title');
-  const studyAreaZone = document.getElementById('study-area-zone');
-  const studyAreaCoords = document.getElementById('study-area-coords');
-  const mapScenarioCount = document.getElementById('map-scenario-count');
+
+  function setSidebarCollapsed(collapsed) {
+    const colLeft = document.querySelector('.sim-col-left');
+    if (colLeft) {
+      colLeft.classList.toggle('hidden', collapsed);
+    }
+    if (viewer) {
+      setTimeout(() => viewer.resize(), 100);
+    }
+  }
+
+  // DOM Elements — Left Column & Palette
+  const btnAddDevTrigger = document.getElementById('btn-add-dev-trigger');
+  const devPaletteContainer = document.getElementById('dev-palette-container');
+  const btnClosePalette = document.getElementById('btn-close-palette');
   const devCardsContainer = document.querySelector('.dev-cards-grid');
   const devListItemsEl = document.getElementById('dev-list-items');
   const devCountEl = document.getElementById('dev-count');
-  const btnGotoAddDev = document.getElementById('btn-goto-add-dev');
-  const btnGotoDevelopments = document.getElementById('btn-goto-developments');
+
+  // Map Layers Checkboxes
+  const layerBuildings = document.getElementById('layer-buildings');
+  const layerTraffic = document.getElementById('layer-traffic');
+  const layerDevAreas = document.getElementById('layer-dev-areas');
+  const layerElectricity = document.getElementById('layer-electricity');
 
   // DOM Elements — Simulation & Results
   const simDevSelect = document.getElementById('sim-dev-select');
@@ -107,9 +119,6 @@ export function initializeApp() {
 
   // Populate Dynamic City Configuration
   if (badgeAreaName) badgeAreaName.textContent = CITY_CONFIG.shortBadgeName;
-  if (studyAreaTitle) studyAreaTitle.textContent = CITY_CONFIG.studyAreaName;
-  if (studyAreaZone) studyAreaZone.textContent = CITY_CONFIG.referenceZoneId;
-  if (studyAreaCoords) studyAreaCoords.textContent = CITY_CONFIG.defaultCoordinatesText;
 
   function updateStatus(msg, isComplete = false) {
     if (statusEl) statusEl.textContent = msg;
@@ -118,26 +127,8 @@ export function initializeApp() {
     }
   }
 
-  function setSidebarCollapsed(collapsed) {
-    if (!sidebar) return;
-    sidebar.classList.toggle('collapsed', collapsed);
-    if (btnRestoreSidebar) {
-      btnRestoreSidebar.classList.toggle('hidden', !collapsed);
-    }
-    if (menuToggleSidebar) {
-      menuToggleSidebar.innerHTML = collapsed
-        ? '<span class="item-icon">📐</span> Open Sidebar'
-        : '<span class="item-icon">📐</span> Collapse Sidebar';
-    }
-    if (viewer) {
-      setTimeout(() => viewer.resize(), 250);
-    }
-  }
-
   function switchView(viewName) {
     currentView = viewName;
-
-    // 1. Update Navigation Tabs Active Class
     const navTabs = document.querySelectorAll('.nav-tab');
     navTabs.forEach((tab) => {
       if (tab.getAttribute('data-view') === viewName) {
@@ -147,35 +138,22 @@ export function initializeApp() {
       }
     });
 
-    // 2. Hide all panels and display target view panel
-    const panels = {
-      map: document.getElementById('panel-map'),
-      developments: document.getElementById('panel-developments'),
-      simulation: document.getElementById('panel-simulation'),
-      results: document.getElementById('panel-results'),
-    };
+    const colLeft = document.querySelector('.sim-col-left');
+    const colRight = document.querySelector('.sim-col-right');
 
-    const panelTitles = {
-      map: 'Map Overview',
-      developments: 'Scenario Developments',
-      simulation: 'What-If Simulation',
-      results: 'Mobility Impact Results',
-    };
+    if (viewName === 'map') {
+      if (colLeft) colLeft.classList.add('hidden');
+      if (colRight) colRight.classList.add('hidden');
+      updateStatus('Switched to 3D Map View');
+    } else {
+      if (colLeft) colLeft.classList.remove('hidden');
+      if (colRight) colRight.classList.remove('hidden');
+      updateStatus(`Switched to ${viewName.toUpperCase()} View`);
+    }
 
-    Object.keys(panels).forEach((pKey) => {
-      if (panels[pKey]) {
-        if (pKey === viewName) {
-          panels[pKey].classList.remove('hidden');
-        } else {
-          panels[pKey].classList.add('hidden');
-        }
-      }
-    });
-
-    if (sidebarPanelTitle) sidebarPanelTitle.textContent = panelTitles[viewName] || 'Digital Twin';
-
-    // 3. Ensure Sidebar is expanded when interacting with views
-    setSidebarCollapsed(false);
+    if (viewer) {
+      setTimeout(() => viewer.resize(), 100);
+    }
   }
 
   function updateSimSelectDropdown() {
@@ -251,6 +229,103 @@ export function initializeApp() {
       placementController.cancelPlacementMode();
     }
     editingDevId = null;
+  }
+
+  function refreshDevList() {
+    renderDevelopmentList(devListItemsEl, devStore, {
+      devCountEl,
+      btnRunSimEl: btnRunSimulation,
+      onSelect: (dev) => {
+        const dId = dev.id || dev.development_id;
+        scenarioState.setSelectedDevForSim(dId);
+        updateSimSelectDropdown();
+        if (viewer && typeof dev.longitude === 'number' && typeof dev.latitude === 'number' && !Number.isNaN(dev.longitude) && !Number.isNaN(dev.latitude)) {
+          viewer.camera.flyTo({
+            destination: Cartesian3.fromDegrees(dev.longitude, dev.latitude, 850),
+            duration: 1.2,
+          });
+        }
+      },
+      onEdit: (dev) => openModal({ ...dev, isNew: false }),
+      onMove: (dev) => {
+        if (placementController) placementController.setMovingId(dev.id || dev.development_id);
+        if (placementBanner) placementBanner.classList.remove('hidden');
+        if (bannerText) bannerText.textContent = `REPOSITIONING ${dev.id || dev.development_id} — Click new location on 3D map`;
+        updateStatus(`Moving ${dev.id || dev.development_id} — Click new 3D location`);
+      },
+      onDelete: (dev) => {
+        const dId = dev.id || dev.development_id;
+        devStore.deleteDevelopment(dId);
+        developmentRenderer.removeDevelopment(dId);
+        if (scenarioState.getState().selectedDevIdForSim === dId) {
+          scenarioState.setSelectedDevForSim(null);
+          scenarioState.setSimulationResult(null);
+          renderSimulationResults(compactResultContent, null, devStore);
+        }
+        refreshDevList();
+        updateStatus(`Deleted ${dev.name || dId}`);
+      },
+    });
+
+    updateSimSelectDropdown();
+  }
+
+  async function handleTriggerSimulation(devRecord) {
+    if (scenarioState.getState().isSimulationRunning) return;
+
+    if (!devRecord.zone_id || devRecord.zone_id === 'unresolved') {
+      updateStatus(`Simulation blocked: ${devRecord.name} is in an unresolved zone.`);
+      return;
+    }
+
+    const devId = devRecord.id || devRecord.development_id;
+
+    scenarioState.setSimulationRunning(true);
+    if (btnRunSimulation) btnRunSimulation.disabled = true;
+    if (btnSimText) btnSimText.textContent = 'RUNNING SIMULATION...';
+    if (simStatusBanner) {
+      simStatusBanner.className = 'sim-status-toast info';
+      simStatusBanner.textContent = `Running What-If travel & electricity simulation for ${devRecord.name}...`;
+      simStatusBanner.classList.remove('hidden');
+    }
+
+    updateStatus(`Running What-If simulation for ${devRecord.name}...`);
+
+    try {
+      const selectedHour = simulationHourSelectSim ? parseInt(simulationHourSelectSim.value || '8', 10) : 8;
+      const result = await runWhatIfSimulation(devRecord, selectedHour);
+      
+      result.development_input = {
+        ...result.development_input,
+        development_id: devId,
+        name: devRecord.name,
+      };
+
+      scenarioState.setSimulationResult(result);
+      renderSimulationResults(compactResultContent, result, devStore);
+      developmentRenderer.syncAll(devStore.getAllDevelopments());
+
+      if (simStatusBanner) {
+        simStatusBanner.className = 'sim-status-toast success';
+        simStatusBanner.textContent = `✓ Simulation completed for ${devRecord.name}!`;
+        setTimeout(() => simStatusBanner.classList.add('hidden'), 4000);
+      }
+      if (btnSimText) btnSimText.textContent = '✓ SIMULATION COMPLETE';
+
+      updateStatus(`Simulation completed for ${devRecord.name}`, true);
+    } catch (err) {
+      if (simStatusBanner) {
+        simStatusBanner.className = 'sim-status-toast error';
+        simStatusBanner.textContent = `Simulation failed: ${err.message}`;
+      }
+      if (btnSimText) btnSimText.textContent = '⚡ RUN WHAT-IF SIMULATION';
+      updateStatus(`Simulation failed: ${err.message}`);
+    } finally {
+      scenarioState.setSimulationRunning(false);
+      if (btnRunSimulation) {
+        btnRunSimulation.disabled = !scenarioState.getState().selectedDevIdForSim;
+      }
+    }
   }
 
   console.log('URBAN TWIN BUILD:', {
@@ -662,16 +737,60 @@ export function initializeApp() {
       });
     }
 
-    // 3. Quick Action Navigation Buttons inside View Panels
-    if (btnGotoAddDev) {
-      btnGotoAddDev.addEventListener('click', () => {
-        switchView('map');
+    // 3. Left Panel Add Development Palette Toggle
+    if (btnAddDevTrigger && devPaletteContainer) {
+      btnAddDevTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        devPaletteContainer.classList.toggle('hidden');
       });
     }
 
-    if (btnGotoDevelopments) {
-      btnGotoDevelopments.addEventListener('click', () => {
-        switchView('developments');
+    if (btnClosePalette && devPaletteContainer) {
+      btnClosePalette.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        devPaletteContainer.classList.add('hidden');
+      });
+    }
+
+    // Scenario Selector Listener
+    const scenarioSelector = document.getElementById('scenario-selector');
+    if (scenarioSelector) {
+      scenarioSelector.addEventListener('change', (e) => {
+        const scenario = e.target.value;
+        updateStatus(`Active Scenario: ${scenario}`);
+      });
+    }
+
+    // Map Layer Checkbox Handlers
+    if (layerBuildings) {
+      layerBuildings.addEventListener('change', (e) => {
+        scenarioState.setMapLayerActive('buildings', e.target.checked);
+        setBuildingsVisible(e.target.checked);
+      });
+    }
+
+    if (layerTraffic) {
+      layerTraffic.addEventListener('change', (e) => {
+        scenarioState.setMapLayerActive('traffic', e.target.checked);
+        setTrafficVisible(e.target.checked);
+      });
+    }
+
+    if (layerDevAreas) {
+      layerDevAreas.addEventListener('change', (e) => {
+        scenarioState.setMapLayerActive('devAreas', e.target.checked);
+        if (buildabilityOverlay) {
+          buildabilityOverlay.toggleBuildableDebugOverlay(e.target.checked);
+        }
+      });
+    }
+
+    if (layerElectricity) {
+      layerElectricity.addEventListener('change', (e) => {
+        scenarioState.setMapLayerActive('electricity', e.target.checked);
+        developmentRenderer.syncAll(devStore.getAllDevelopments());
       });
     }
 
@@ -680,9 +799,8 @@ export function initializeApp() {
         const selectedId = simDevSelect.value;
         if (selectedId) {
           scenarioState.setSelectedDevForSim(selectedId);
-          // Clear stale result from previous development
           scenarioState.setSimulationResult(null);
-          renderSimulationResults(compactResultContent, null);
+          renderSimulationResults(compactResultContent, null, devStore);
 
           if (btnRunSimulation) btnRunSimulation.disabled = false;
           if (btnSimText) btnSimText.textContent = '⚡ RUN WHAT-IF SIMULATION';
@@ -703,16 +821,19 @@ export function initializeApp() {
     }
 
     // 4. Render Development Palette Cards
-    renderPaletteCards(devCardsContainer, {
-      onCardPointerDown: (typeKey, spec, event) => {
-        if (placementController) placementController.handleCardPointerDown(typeKey, spec, event);
-      },
-      onCardClick: (typeKey, spec) => {
-        if (placementController) placementController.handleCardClick(typeKey, spec);
-        if (placementBanner) placementBanner.classList.remove('hidden');
-        if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
-      },
-    });
+    if (devCardsContainer) {
+      renderPaletteCards(devCardsContainer, {
+        onCardPointerDown: (typeKey, spec, event) => {
+          if (placementController) placementController.handleCardPointerDown(typeKey, spec, event);
+        },
+        onCardClick: (typeKey, spec) => {
+          if (placementController) placementController.handleCardClick(typeKey, spec);
+          if (devPaletteContainer) devPaletteContainer.classList.add('hidden');
+          if (placementBanner) placementBanner.classList.remove('hidden');
+          if (bannerText) bannerText.textContent = `📍 PLACING ${spec.label.toUpperCase()} — Move pointer over 3D map`;
+        },
+      });
+    }
 
     window.addEventListener('pointermove', (e) => {
       if (placementController) placementController.handlePointerMove(e);

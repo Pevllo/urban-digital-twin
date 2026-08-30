@@ -20,6 +20,7 @@ export const SUPPORTED_DEV_TYPES = {
     propertyFields: [
       { key: 'num_residents', label: 'Number of Residents', type: 'number', default: 5000, required: true },
       { key: 'num_units', label: 'Number of Housing Units', type: 'number', default: 1200, required: false },
+      { key: 'gross_floor_area_sqm', label: 'Gross Floor Area (m²)', type: 'number', default: 0, required: false },
     ],
   },
   hospital: {
@@ -31,6 +32,7 @@ export const SUPPORTED_DEV_TYPES = {
     propertyFields: [
       { key: 'num_beds', label: 'Number of Beds', type: 'number', default: 300, required: true },
       { key: 'staff_count', label: 'Staff Count', type: 'number', default: 450, required: false },
+      { key: 'gross_floor_area_sqm', label: 'Gross Floor Area (m²)', type: 'number', default: 0, required: false },
     ],
   },
   mall: {
@@ -42,6 +44,7 @@ export const SUPPORTED_DEV_TYPES = {
     propertyFields: [
       { key: 'gross_leasable_area_sqm', label: 'Gross Leasable Area (m²)', type: 'number', default: 25000, required: true },
       { key: 'visitor_capacity', label: 'Daily Visitor Capacity', type: 'number', default: 10000, required: false },
+      { key: 'gross_floor_area_sqm', label: 'Gross Floor Area (m²)', type: 'number', default: 0, required: false },
     ],
   },
   school: {
@@ -53,6 +56,7 @@ export const SUPPORTED_DEV_TYPES = {
     propertyFields: [
       { key: 'num_students', label: 'Number of Students', type: 'number', default: 1500, required: true },
       { key: 'staff_count', label: 'Staff Count', type: 'number', default: 120, required: false },
+      { key: 'gross_floor_area_sqm', label: 'Gross Floor Area (m²)', type: 'number', default: 0, required: false },
     ],
   },
   office: {
@@ -75,6 +79,7 @@ export const SUPPORTED_DEV_TYPES = {
     propertyFields: [
       { key: 'num_rooms', label: 'Number of Rooms', type: 'number', default: 250, required: true },
       { key: 'staff_count', label: 'Staff Count', type: 'number', default: 180, required: false },
+      { key: 'gross_floor_area_sqm', label: 'Gross Floor Area (m²)', type: 'number', default: 0, required: false },
     ],
   },
   mixed_use: {

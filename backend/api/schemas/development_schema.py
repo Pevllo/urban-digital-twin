@@ -54,3 +54,5 @@ class SimulationRequestSchema(BaseModel):
     name: Optional[str] = ""
     properties: Dict[str, Any] = Field(default_factory=dict)
     simulation_hour: Optional[int] = 8
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None

@@ -8,7 +8,15 @@ export class ScenarioState {
       selectedDevIdForSim: null,
       isSimulationRunning: false,
       lastSimulationResult: null,
+      previousSimulationResult: null,
+      resultsByDevId: {},
       buildabilityState: { valid: true, reason: '' },
+      activeMapLayers: {
+        buildings: true,
+        traffic: true,
+        devAreas: true,
+        electricity: true,
+      },
     };
     this.listeners = new Set();
   }
@@ -49,7 +57,29 @@ export class ScenarioState {
   }
 
   setSimulationResult(result) {
-    this.state.lastSimulationResult = result;
+    if (result && !result.error) {
+      if (this.state.lastSimulationResult) {
+        this.state.previousSimulationResult = this.state.lastSimulationResult;
+      }
+      this.state.lastSimulationResult = result;
+      const devId = result.development_input?.development_id || this.state.selectedDevIdForSim;
+      if (devId) {
+        this.state.resultsByDevId = {
+          ...this.state.resultsByDevId,
+          [devId]: result,
+        };
+      }
+    } else {
+      this.state.lastSimulationResult = result;
+    }
+    this.notify();
+  }
+
+  setMapLayerActive(layerKey, isActive) {
+    this.state.activeMapLayers = {
+      ...this.state.activeMapLayers,
+      [layerKey]: isActive,
+    };
     this.notify();
   }
 

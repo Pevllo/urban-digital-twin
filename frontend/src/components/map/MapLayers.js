@@ -9,6 +9,9 @@ import {
 import spatialData from '../../data/spatialFeatures.json';
 import { ROAD_WIDTH_BY_TYPE, getDatasetDiagnostics } from '../../utils/buildabilityEngine.js';
 
+let osmBuildingsTileset = null;
+let roadEntities = [];
+
 export async function loadMapLayers(viewer) {
   if (!viewer) return;
 
@@ -18,8 +21,8 @@ export async function loadMapLayers(viewer) {
 
   // 1. Load and Style 3D OSM Buildings
   try {
-    const osmBuildings = await createOsmBuildingsAsync();
-    osmBuildings.style = new Cesium3DTileStyle({
+    osmBuildingsTileset = await createOsmBuildingsAsync();
+    osmBuildingsTileset.style = new Cesium3DTileStyle({
       color: {
         conditions: [
           ['${feature["building"]} === "hospital"', 'color("#f87171", 0.9)'],
@@ -29,12 +32,13 @@ export async function loadMapLayers(viewer) {
         ],
       },
     });
-    viewer.scene.primitives.add(osmBuildings);
+    viewer.scene.primitives.add(osmBuildingsTileset);
   } catch (e) {
     console.warn('[MapLayers] OSM 3D Buildings load fallback:', e);
   }
 
   // 2. Render Road Network Polylines (Consuming exact normalized road dataset)
+  roadEntities = [];
   const roads = spatialData?.roads || [];
   if (Array.isArray(roads) && roads.length > 0) {
     roads.forEach((roadFeature) => {
@@ -78,7 +82,7 @@ export async function loadMapLayers(viewer) {
         renderColor = '#64748b';
       }
 
-      viewer.entities.add({
+      const entity = viewer.entities.add({
         polyline: {
           positions: Cartesian3.fromDegreesArray(flatPositions),
           width: renderWidth,
@@ -91,6 +95,20 @@ export async function loadMapLayers(viewer) {
           clampToGround: true,
         },
       });
+      roadEntities.push(entity);
     });
   }
 }
+
+export function setBuildingsVisible(visible) {
+  if (osmBuildingsTileset) {
+    osmBuildingsTileset.show = visible;
+  }
+}
+
+export function setTrafficVisible(visible) {
+  roadEntities.forEach((ent) => {
+    ent.show = visible;
+  });
+}
+

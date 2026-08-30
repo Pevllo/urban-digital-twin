@@ -12,18 +12,20 @@ import sys
 
 # Path setup
 SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = SCRIPT_DIR.parent.parent
+MODELS_DIR = SCRIPT_DIR.parent.parent
+REAL_PROJECT_ROOT = MODELS_DIR.parent
 
-for d in [PROJECT_ROOT / "traffic-model" / "src", PROJECT_ROOT / "trip-demand-model" / "src"]:
+for d in [REAL_PROJECT_ROOT, MODELS_DIR / "traffic-model" / "src", MODELS_DIR / "trip-demand-model" / "src"]:
     if str(d) not in sys.path:
         sys.path.insert(0, str(d))
 
 from trip_generation import DevelopmentInput
 from simulator import simulate_what_if_scenario
+from backend.api.services.electricity_service import run_electricity_prediction
 
 
 def run_cli_simulation(payload_dict: dict) -> dict:
-    """Validates payload, constructs DevelopmentInput, and runs simulate_what_if_scenario."""
+    """Validates payload, constructs DevelopmentInput, and runs simulate_what_if_scenario + electricity prediction."""
     dev_type = payload_dict.get("development_type")
     zone_id = payload_dict.get("zone_id")
     properties = payload_dict.get("properties", {})
@@ -42,7 +44,40 @@ def run_cli_simulation(payload_dict: dict) -> dict:
 
     # Execute backend 4-stage pipeline
     result = simulate_what_if_scenario(dev_input, hour=hour)
-    return result.to_dict()
+    res_dict = result.to_dict()
+
+    # Electricity prediction
+    latitude = payload_dict.get("latitude")
+    longitude = payload_dict.get("longitude")
+
+    footprint_area = 0.0
+    width = properties.get("width")
+    length = properties.get("length")
+    if width and length:
+        try:
+            footprint_area = float(width) * float(length)
+        except (ValueError, TypeError):
+            footprint_area = 0.0
+
+    floors = 1
+    if properties.get("floors"):
+        try:
+            floors = int(properties.get("floors"))
+        except (ValueError, TypeError):
+            floors = 1
+
+    electricity_result = run_electricity_prediction(
+        dev_type=dev_type,
+        latitude=latitude,
+        longitude=longitude,
+        properties=properties,
+        simulation_hour=hour,
+        footprint_area=footprint_area,
+        floors=floors,
+    )
+
+    res_dict["stage5_electricity"] = electricity_result
+    return res_dict
 
 
 def main():

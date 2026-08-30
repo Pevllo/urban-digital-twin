@@ -417,11 +417,7 @@ export function createPlacementController(viewer, options = {}) {
     }
 
     // ONLY process pointerup as a drop if DRAGGING_FROM_SIDEBAR and dragStarted is true
-    if (
-      placementInteraction !== PLACEMENT_INTERACTIONS.DRAGGING_FROM_SIDEBAR ||
-      !dragStarted ||
-      placementState !== PLACEMENT_STATES.PLACING
-    ) {
+    if (placementInteraction !== PLACEMENT_INTERACTIONS.DRAGGING_FROM_SIDEBAR && !dragStarted) {
       dragCandidateType = null;
       dragCandidateSpec = null;
       return;

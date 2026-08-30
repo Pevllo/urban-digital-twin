@@ -60,7 +60,16 @@ export class DevelopmentRenderer {
     const areaHa = (areaSqm / 10000).toFixed(2);
     const areaLabel = `${areaSqm.toLocaleString()} m² (${areaHa} ha)`;
 
-    const labelText = `🏢 PROPOSED ${devType.toUpperCase()}\n${name || devId}\nFootprint: ${length}m × ${width}m × ${bldgHeight}m (${floors || Math.round(bldgHeight / 3)} fl | ${areaLabel})\nZone ${zone_id || 'unresolved'}`;
+    // Check if electricity result exists for this development
+    const state = typeof window !== 'undefined' && window.getScenarioState ? window.getScenarioState() : null;
+    const devResult = devRecord.electricityResult || (state && state.resultsByDevId ? state.resultsByDevId[devId] : null);
+    const elecKwh = devResult?.stage5_electricity?.electricity_kwh;
+
+    let labelText = `🏢 ${name || devId}\n${devType.toUpperCase()} • ${floors || Math.round(bldgHeight / 3)} Fl | ${areaSqm.toLocaleString()} m²\nZone ${zone_id || 'unresolved'}`;
+
+    if (typeof elecKwh === 'number' && elecKwh > 0) {
+      labelText = `⚡ ${name || devId}\n${elecKwh.toFixed(1)} kWh\n${devType.toUpperCase()} • ${floors || Math.round(bldgHeight / 3)} Fl | ${areaSqm.toLocaleString()} m²`;
+    }
 
     if (this.entitiesMap.has(devId)) {
       const entity = this.entitiesMap.get(devId);
@@ -68,6 +77,11 @@ export class DevelopmentRenderer {
       entity.position = Cartesian3.clone(position);
       if (entity.box) {
         entity.box.dimensions = new Cartesian3(length, width, bldgHeight);
+        if (typeof elecKwh === 'number' && elecKwh > 0) {
+          entity.box.material = Color.fromCssColorString('#facc15').withAlpha(0.95);
+        } else {
+          entity.box.material = Color.fromCssColorString(spec.color).withAlpha(0.95);
+        }
       }
       if (entity.label) {
         entity.label.text = labelText;
@@ -88,6 +102,8 @@ export class DevelopmentRenderer {
       return entity;
     }
 
+    const boxColor = (typeof elecKwh === 'number' && elecKwh > 0) ? '#facc15' : spec.color;
+
     const entity = this.viewer.entities.add({
       id: `development-${devId}`,
       position: Cartesian3.clone(position),
@@ -100,7 +116,7 @@ export class DevelopmentRenderer {
       },
       box: {
         dimensions: new Cartesian3(length, width, bldgHeight),
-        material: Color.fromCssColorString(spec.color).withAlpha(0.95),
+        material: Color.fromCssColorString(boxColor).withAlpha(0.95),
         outline: true,
         outlineColor: Color.WHITE,
         heightReference: HeightReference.NONE,

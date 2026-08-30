@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Urban Digital Twin — 3D What-If Simulator</title>
+    <title>Urban Digital Twin — 3D What-If Simulation Dashboard</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,40 +12,44 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   </head>
   <body>
-    <!-- Full-screen Cesium 3D Container -->
-    <div id="cesiumContainer"></div>
-
     <!-- Top Application Navigation Bar -->
-    <header id="top-nav-bar" class="top-nav-bar glass-header">
+    <header id="top-nav-bar" class="top-nav-bar">
       <div class="nav-left">
         <div class="nav-brand">
           <span class="nav-brand-icon">🌆</span>
           <div class="nav-brand-text">
-            <span class="nav-brand-title">URBAN TWIN</span>
-            <span class="nav-brand-sub">3D What-If Simulator</span>
+            <span class="nav-brand-title">Urban Digital Twin</span>
           </div>
         </div>
 
+        <div class="nav-scenario-wrapper">
+          <select id="scenario-selector" class="nav-scenario-select">
+            <option value="NAC_R3" selected>Scenario: New Cairo District ▾</option>
+            <option value="NAC_R5">Scenario: NAC District R5</option>
+            <option value="NEW_GIZA">Scenario: New Giza Sector</option>
+          </select>
+        </div>
+
         <nav class="nav-tabs" aria-label="Main Navigation">
-          <button class="nav-tab active" data-view="map" aria-label="Map View">
+          <button class="nav-tab" data-view="map" aria-label="Map View">
             <span class="tab-icon">🗺️</span> Map
           </button>
-          <button class="nav-tab" data-view="developments" aria-label="Developments View">
-            <span class="tab-icon">🏗️</span> Developments
-          </button>
-          <button class="nav-tab" data-view="simulation" aria-label="Simulation View">
+          <button class="nav-tab active" data-view="simulation" aria-label="Simulation View">
             <span class="tab-icon">⚡</span> Simulation
           </button>
-          <button class="nav-tab" data-view="results" aria-label="Results View">
-            <span class="tab-icon">📊</span> Results
+          <button class="nav-tab" data-view="analytics" aria-label="Analytics View">
+            <span class="tab-icon">📊</span> Analytics
+          </button>
+          <button class="nav-tab" data-view="reports" aria-label="Reports View">
+            <span class="tab-icon">📋</span> Reports
           </button>
         </nav>
       </div>
 
       <div class="nav-right">
-        <div id="study-area-badge" class="study-area-badge" title="Active Study Area">
-          <span class="area-pin">📍</span>
-          <span id="badge-area-name" class="area-name">R3 • New Capital</span>
+        <div class="header-meta-badge">
+          <span class="meta-time">14:00</span>
+          <span class="meta-weather">☀️ Cairo, Egypt</span>
         </div>
         <div class="connection-status">
           <span class="status-dot pulsing"></span>
@@ -57,9 +61,6 @@
           </button>
           <!-- Hamburger Dropdown Menu -->
           <div id="hamburger-dropdown" class="hamburger-dropdown glass-dropdown hidden">
-            <button id="menu-toggle-sidebar" class="dropdown-item">
-              <span class="item-icon">📐</span> Toggle Sidebar
-            </button>
             <button id="menu-reset-camera" class="dropdown-item">
               <span class="item-icon">🎯</span> Reset Camera
             </button>
@@ -78,260 +79,244 @@
       </div>
     </header>
 
-    <!-- Top Placement Mode Pill Banner -->
-    <div id="placement-banner" class="placement-banner glass-banner hidden">
-      <span class="banner-dot">🟢</span>
-      <span id="banner-text" class="banner-text">PLACEMENT MODE ACTIVE — Move pointer over 3D map to place Residential Compound</span>
-      <button id="btn-cancel-placement" class="btn-banner-cancel" aria-label="Cancel Placement">Cancel (ESC)</button>
-    </div>
-
-    <!-- Floating Placement Information Card (Upper-Center Map Overlay) -->
-    <div id="placement-info-card" class="placement-info-card glass-info-card hidden">
-      <div class="card-header-row">
-        <div class="card-title-group">
-          <span id="info-card-icon" class="info-card-icon">🏠</span>
-          <span id="info-card-title" class="info-card-title">Residential Compound</span>
-        </div>
-        <span id="info-card-status-badge" class="info-card-badge valid">VALID</span>
-      </div>
-
-      <div class="card-details-grid">
-        <div class="card-detail-row">
-          <span class="detail-label">Footprint:</span>
-          <span id="info-card-footprint" class="detail-value">90m × 18m (1,620 m²)</span>
-        </div>
-        <div class="card-detail-row">
-          <span class="detail-label">Height:</span>
-          <span id="info-card-height" class="detail-value">18.00 m</span>
-        </div>
-        <div class="card-detail-row">
-          <span class="detail-label">Storeys:</span>
-          <span id="info-card-storeys" class="detail-value">6</span>
-        </div>
-      </div>
-
-      <div id="info-card-status-footer" class="card-status-footer valid">
-        <span id="info-card-status-icon" class="status-footer-icon">✓</span>
-        <span id="info-card-status-text" class="status-footer-text">No conflicts detected</span>
-      </div>
-    </div>
-
-    <!-- Bottom-Center Placement Legend Overlay -->
-    <div id="placement-legend" class="placement-legend glass-legend hidden">
-      <div class="legend-item valid">
-        <span class="legend-box valid"></span>
-        <span>Valid Placement</span>
-      </div>
-      <div class="legend-item invalid">
-        <span class="legend-box invalid"></span>
-        <span>Invalid Placement</span>
-      </div>
-      <div class="legend-divider"></div>
-      <div class="legend-instruction">
-        <span class="legend-mouse-icon">🖱</span>
-        <span>Scroll to rotate / zoom</span>
-      </div>
-    </div>
-
-    <!-- Placement Debug Panel (Bottom Right) -->
-    <div id="placement-debug-panel" class="placement-debug-panel glass-panel hidden">
-      <div class="debug-title">PHYSICAL PLACEMENT DEBUG</div>
-      <div class="debug-row"><span>Development:</span><strong id="debug-dev-type">residential_compound</strong></div>
-      <div class="debug-row"><span>ID:</span><strong id="debug-dev-id">PREVIEW</strong></div>
-      <div class="debug-row"><span>Footprint:</span><strong id="debug-footprint">90m × 18m</strong></div>
-      <div class="debug-row"><span>Latitude:</span><strong id="debug-lat">30.0301° N</strong></div>
-      <div class="debug-row"><span>Longitude:</span><strong id="debug-lon">31.7406° E</strong></div>
-      <div class="debug-row"><span>Nearest Zone:</span><strong id="debug-zone">Z0054</strong></div>
-      <div class="debug-row"><span>Cesium Entity:</span><span id="debug-entity-status" class="debug-badge green">VALID (no conflicts)</span></div>
-    </div>
-
-    <!-- Floating Restore Sidebar Button (Visible when sidebar is collapsed) -->
-    <button id="btn-restore-sidebar" class="sidebar-restore-btn hidden" aria-label="Open sidebar" title="Open sidebar">
-      <span class="restore-icon">▶</span>
-    </button>
-
-    <!-- Compact 300px Left Dashboard Sidebar -->
-    <aside id="sidebar-dashboard" class="sidebar-dashboard glass-sidebar">
-      <!-- Sidebar Header & Toggle -->
-      <div class="sidebar-header">
-        <div class="sidebar-brand">
-          <span id="sidebar-panel-title" class="sidebar-title">Map Overview</span>
-        </div>
-        <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
-          <span class="toggle-icon">◀</span>
-        </button>
-      </div>
-
-      <!-- Contextual View Panels Container -->
-      <div class="sidebar-content">
+    <!-- Main 3-Column Simulation Workspace -->
+    <main id="sim-workspace" class="sim-workspace">
+      <div class="sim-3col-layout">
         
-        <!-- PANEL 1: MAP VIEW -->
-        <div id="panel-map" class="view-panel">
-          <!-- Study Area Card (Rendered dynamically from CITY_CONFIG state) -->
-          <div class="panel-card">
-            <div class="card-header">
-              <span class="card-icon">📍</span>
-              <h4>STUDY AREA</h4>
-            </div>
-            <div class="card-body">
-              <div class="info-row">
-                <span class="info-label">Location:</span>
-                <span id="study-area-title" class="info-value">District R3, New Administrative Capital</span>
+        <!-- LEFT COLUMN: DEVELOPMENTS & MAP LAYERS -->
+        <aside class="sim-col-left">
+          <!-- DEVELOPMENTS CARD -->
+          <div class="dashboard-card">
+            <div class="card-header-flex">
+              <div class="card-header-title">
+                <span>DEVELOPMENTS</span>
+                <span id="dev-count" class="count-badge">4</span>
               </div>
-              <div class="info-row">
-                <span class="info-label">Reference Zone:</span>
-                <span id="study-area-zone" class="info-value highlight-purple">Z0090</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Coordinates:</span>
-                <span id="study-area-coords" class="info-value mono">30.0154° N, 31.7366° E</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Add Development Palette Card -->
-          <div class="panel-card">
-            <div class="card-header">
-              <span class="card-icon">➕</span>
-              <h4>ADD DEVELOPMENT</h4>
-            </div>
-            <div class="card-body">
-              <p class="instruction-text">Drag or click a development to place it on the map.</p>
-              <div class="dev-cards-grid">
-                <div class="draggable-dev-card" data-type="residential_compound">
-                  <span class="card-icon">🏠</span>
-                  <div class="card-info">
-                    <div class="card-name">Residential Compound</div>
-                    <div class="card-desc">Master-planned housing</div>
-                  </div>
-                </div>
-
-                <div class="draggable-dev-card" data-type="hospital">
-                  <span class="card-icon">🏥</span>
-                  <div class="card-info">
-                    <div class="card-name">Hospital</div>
-                    <div class="card-desc">Healthcare & medical center</div>
-                  </div>
-                </div>
-
-                <div class="draggable-dev-card" data-type="mall">
-                  <span class="card-icon">🏬</span>
-                  <div class="card-info">
-                    <div class="card-name">Commercial Mall</div>
-                    <div class="card-desc">Retail & commercial hub</div>
-                  </div>
-                </div>
-
-                <div class="draggable-dev-card" data-type="school">
-                  <span class="card-icon">🏫</span>
-                  <div class="card-info">
-                    <div class="card-name">School</div>
-                    <div class="card-desc">Educational campus</div>
-                  </div>
-                </div>
-
-                <div class="draggable-dev-card" data-type="office">
-                  <span class="card-icon">🏢</span>
-                  <div class="card-info">
-                    <div class="card-name">Office Complex</div>
-                    <div class="card-desc">Corporate office building</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Scenario Summary Card -->
-          <div class="panel-card">
-            <div class="card-header">
-              <span class="card-icon">📋</span>
-              <h4>SCENARIO</h4>
-            </div>
-            <div class="card-body flex-between">
-              <div>
-                <span id="map-scenario-count" class="summary-count">0 Developments</span>
-                <p class="summary-sub">Active scenario items placed</p>
-              </div>
-              <button id="btn-goto-developments" class="btn-secondary sm">View List</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- PANEL 2: DEVELOPMENTS VIEW -->
-        <div id="panel-developments" class="view-panel hidden">
-          <div class="panel-card full-height">
-            <div class="card-header flex-between">
-              <div class="flex-align">
-                <span class="card-icon">📋</span>
-                <h4>SCENARIO DEVELOPMENTS</h4>
-              </div>
-              <span id="dev-count" class="count-badge">0</span>
-            </div>
-            <div class="card-body">
-              <button id="btn-goto-add-dev" class="btn-outline full-width-btn mb-12">
-                <span>➕</span> Add Development
+              <button id="btn-add-dev-trigger" class="btn-add-dev">
+                <span>+</span> Add Development
               </button>
-              <div id="dev-list-items" class="dev-list-container">
-                <p class="empty-list-msg">No developments placed yet. Drag or click a development to place it on the map.</p>
+            </div>
+            
+            <!-- Expandable Development Palette -->
+            <div id="dev-palette-container" class="dev-palette-popup hidden">
+              <div class="palette-header">
+                <span>Select Development Type to Place</span>
+                <button id="btn-close-palette" class="btn-close-sm">&times;</button>
+              </div>
+              <div class="dev-cards-grid"></div>
+            </div>
+
+            <!-- Development List Items -->
+            <div id="dev-list-items" class="dev-list-scroll">
+              <!-- Dynamically populated by DevelopmentList.js -->
+            </div>
+          </div>
+
+          <!-- MAP LAYERS CARD -->
+          <div class="dashboard-card">
+            <div class="card-header-flex">
+              <div class="card-header-title">MAP LAYERS</div>
+            </div>
+            <div class="map-layers-list">
+              <label class="layer-checkbox-item">
+                <input type="checkbox" id="layer-buildings" checked />
+                <span class="checkbox-custom"></span>
+                <span class="layer-label">Buildings</span>
+              </label>
+              <label class="layer-checkbox-item">
+                <input type="checkbox" id="layer-traffic" checked />
+                <span class="checkbox-custom"></span>
+                <span class="layer-label">Traffic</span>
+              </label>
+              <label class="layer-checkbox-item">
+                <input type="checkbox" id="layer-dev-areas" checked />
+                <span class="checkbox-custom"></span>
+                <span class="layer-label">Development Areas</span>
+              </label>
+              <label class="layer-checkbox-item highlight-elec">
+                <input type="checkbox" id="layer-electricity" checked />
+                <span class="checkbox-custom"></span>
+                <span class="layer-label">⚡ Electricity Demand</span>
+              </label>
+            </div>
+
+            <!-- Electricity Demand Scale Bar -->
+            <div class="elec-demand-legend">
+              <div class="legend-title">Electricity Demand (kWh)</div>
+              <div class="elec-scale-gradient"></div>
+              <div class="elec-scale-labels">
+                <span>Low</span>
+                <span>High</span>
               </div>
             </div>
           </div>
-        </div>
+        </aside>
 
-        <!-- PANEL 3: SIMULATION VIEW -->
-        <div id="panel-simulation" class="view-panel hidden">
-          <div class="panel-card">
-            <div class="card-header">
-              <span class="card-icon">⚡</span>
-              <h4>WHAT-IF SIMULATION</h4>
+        <!-- CENTER COLUMN: 3D MAP & TRAFFIC OVERVIEW -->
+        <section class="sim-col-center">
+          <!-- 3D Cesium Map Canvas Container -->
+          <div id="cesiumContainer" class="cesium-map-wrapper"></div>
+
+          <!-- Placement Overlays -->
+          <div id="placement-banner" class="placement-banner hidden">
+            <span class="banner-dot">🟢</span>
+            <span id="banner-text" class="banner-text">PLACEMENT MODE ACTIVE — Click on 3D map to place building</span>
+            <button id="btn-cancel-placement" class="btn-banner-cancel">Cancel (ESC)</button>
+          </div>
+
+          <div id="placement-info-card" class="placement-info-card hidden">
+            <div class="card-header-row">
+              <div class="card-title-group">
+                <span id="info-card-icon" class="info-card-icon">🏠</span>
+                <span id="info-card-title" class="info-card-title">Residential Compound</span>
+              </div>
+              <span id="info-card-status-badge" class="info-card-badge valid">VALID</span>
             </div>
-            <div class="card-body">
-              <div class="form-group mb-12">
-                <label for="sim-dev-select">Selected Development for Simulation</label>
-                <select id="sim-dev-select" class="form-input">
-                  <option value="">-- Select Placed Development --</option>
-                </select>
-              </div>
-
-              <div class="form-group mb-16">
-                <label for="simulation-hour-select-sim">Simulation Peak Hour</label>
-                <select id="simulation-hour-select-sim" class="form-input">
-                  <option value="8" selected>08:00 AM (Morning Commute Peak)</option>
-                  <option value="9">09:00 AM (Morning Peak)</option>
-                  <option value="17">05:00 PM (Evening Commute Peak)</option>
-                  <option value="18">06:00 PM (Evening Peak)</option>
-                  <option value="12">12:00 PM (Midday Peak)</option>
-                </select>
-              </div>
-
-              <!-- Prominent Action Button -->
-              <button id="btn-run-simulation" class="btn-primary-lg full-width-btn" disabled>
-                <span class="btn-sim-icon">⚡</span>
-                <span id="btn-sim-text">RUN WHAT-IF SIMULATION</span>
-              </button>
-
-              <div id="sim-status-banner" class="sim-status-box hidden"></div>
+            <div class="card-details-grid">
+              <div class="card-detail-row"><span class="detail-label">Footprint:</span><span id="info-card-footprint" class="detail-value">90m × 18m</span></div>
+              <div class="card-detail-row"><span class="detail-label">Height:</span><span id="info-card-height" class="detail-value">18.00 m</span></div>
+              <div class="card-detail-row"><span class="detail-label">Storeys:</span><span id="info-card-storeys" class="detail-value">6</span></div>
+            </div>
+            <div id="info-card-status-footer" class="card-status-footer valid">
+              <span id="info-card-status-icon" class="status-footer-icon">✓</span>
+              <span id="info-card-status-text" class="status-footer-text">No conflicts detected</span>
             </div>
           </div>
-        </div>
 
-        <!-- PANEL 4: RESULTS VIEW -->
-        <div id="panel-results" class="view-panel hidden">
-          <div class="panel-card full-height">
-            <div class="card-header">
-              <span class="card-icon">📊</span>
-              <h4>MOBILITY IMPACT RESULTS</h4>
+          <div id="placement-legend" class="placement-legend hidden">
+            <div class="legend-item valid"><span class="legend-box valid"></span><span>Valid Placement</span></div>
+            <div class="legend-item invalid"><span class="legend-box invalid"></span><span>Invalid Placement</span></div>
+            <div class="legend-divider"></div>
+            <div class="legend-instruction"><span>🖱 Scroll to rotate / zoom</span></div>
+          </div>
+
+          <div id="placement-debug-panel" class="placement-debug-panel hidden">
+            <div class="debug-title">PHYSICAL PLACEMENT DEBUG</div>
+            <div class="debug-row"><span>Development:</span><strong id="debug-dev-type">office</strong></div>
+            <div class="debug-row"><span>ID:</span><strong id="debug-dev-id">DEV-001</strong></div>
+            <div class="debug-row"><span>Footprint:</span><strong id="debug-footprint">55m × 55m</strong></div>
+            <div class="debug-row"><span>Latitude:</span><strong id="debug-lat">30.0154° N</strong></div>
+            <div class="debug-row"><span>Longitude:</span><strong id="debug-lon">31.7366° E</strong></div>
+            <div class="debug-row"><span>Nearest Zone:</span><strong id="debug-zone">Z0090</strong></div>
+            <div class="debug-row"><span>Status:</span><span id="debug-entity-status" class="debug-badge green">VALID</span></div>
+          </div>
+
+          <!-- Bottom Traffic Overview Overlay Bar -->
+          <div class="traffic-overview-overlay">
+            <div class="traffic-overview-header">
+              <span class="overview-title">TRAFFIC OVERVIEW</span>
             </div>
-            <div class="card-body">
-              <div id="compact-result-content" class="compact-results">
-                <p class="empty-list-msg">No simulation results yet. Select a development in Simulation view and press Run What-If Simulation.</p>
+            <div class="traffic-stats-row">
+              <div class="t-stat-box">
+                <span class="t-stat-label">TOTAL DEMAND</span>
+                <strong class="t-stat-val">2,451 <span class="t-stat-unit">veh/hr</span></strong>
+              </div>
+              <div class="t-stat-box">
+                <span class="t-stat-label">TOTAL ASSIGNED</span>
+                <strong class="t-stat-val">2,398 <span class="t-stat-unit">veh/hr</span></strong>
+              </div>
+              <div class="t-stat-box">
+                <span class="t-stat-label">AVG. CONGESTION</span>
+                <strong class="t-stat-val">0.68 <span class="t-stat-unit">V/C</span></strong>
+              </div>
+              <div class="t-stat-box">
+                <span class="t-stat-label">CRITICAL ROADS</span>
+                <strong class="t-stat-val warn">7 <span class="t-stat-unit">segments</span></strong>
+              </div>
+              <div class="congestion-legend-box">
+                <span class="legend-sub-title">CONGESTION MAP</span>
+                <div class="congestion-dots">
+                  <span class="c-dot green">Low (&lt; 0.5)</span>
+                  <span class="c-dot yellow">Moderate (0.5-0.8)</span>
+                  <span class="c-dot orange">High (0.8-1.0)</span>
+                  <span class="c-dot red">Very High (&gt; 1.0)</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
+        <!-- RIGHT COLUMN: SIMULATION RESULTS -->
+        <aside class="sim-col-right">
+          <div class="dashboard-card full-height">
+            <div id="compact-result-content" class="sim-results-scroll">
+              <!-- Dynamically populated by SimulationResults.js -->
+            </div>
+          </div>
+        </aside>
       </div>
-    </aside>
+
+      <!-- BOTTOM SIMULATION PIPELINE BAR -->
+      <footer class="sim-pipeline-bar">
+        <div class="pipeline-stages">
+          <div class="pipeline-stage step-1 completed">
+            <span class="stage-num">1</span>
+            <div class="stage-text">
+              <span class="stage-name">Trip Generation</span>
+              <span class="stage-status">Completed</span>
+            </div>
+          </div>
+          <span class="pipeline-arrow">→</span>
+
+          <div class="pipeline-stage step-2 completed">
+            <span class="stage-num">2</span>
+            <div class="stage-text">
+              <span class="stage-name">Trip Distribution</span>
+              <span class="stage-status">Completed</span>
+            </div>
+          </div>
+          <span class="pipeline-arrow">→</span>
+
+          <div class="pipeline-stage step-3 completed">
+            <span class="stage-num">3</span>
+            <div class="stage-text">
+              <span class="stage-name">Mode Choice</span>
+              <span class="stage-status">Completed</span>
+            </div>
+          </div>
+          <span class="pipeline-arrow">→</span>
+
+          <div class="pipeline-stage step-4 completed">
+            <span class="stage-num">4</span>
+            <div class="stage-text">
+              <span class="stage-name">Traffic Assignment</span>
+              <span class="stage-status">Completed</span>
+            </div>
+          </div>
+          <span class="pipeline-arrow">→</span>
+
+          <div class="pipeline-stage step-5 completed highlight-elec">
+            <span class="stage-num">⚡ 5</span>
+            <div class="stage-text">
+              <span class="stage-name">Electricity Demand</span>
+              <span class="stage-status">Completed</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pipeline-actions">
+          <!-- Selection dropdown for target development -->
+          <select id="sim-dev-select" class="sim-dev-select-sm" title="Target Development">
+            <option value="">-- Select Placed Development --</option>
+          </select>
+          <select id="simulation-hour-select-sim" class="sim-dev-select-sm" title="Peak Hour">
+            <option value="8" selected>08:00 AM Peak</option>
+            <option value="9">09:00 AM Peak</option>
+            <option value="17">05:00 PM Peak</option>
+            <option value="18">06:00 PM Peak</option>
+            <option value="12">12:00 PM Midday</option>
+          </select>
+          
+          <button id="btn-run-simulation" class="btn-run-what-if" disabled>
+            <span class="btn-icon">⚡</span>
+            <span id="btn-sim-text">RUN WHAT-IF SIMULATION</span>
+          </button>
+        </div>
+      </footer>
+    </main>
+
+    <!-- Hidden Sim Status Banner for notifications -->
+    <div id="sim-status-banner" class="sim-status-toast hidden"></div>
 
     <!-- Configure Properties Modal Window -->
     <div id="properties-modal" class="modal-overlay hidden">
@@ -350,7 +335,7 @@
         <form id="properties-form" class="properties-form">
           <div class="form-group">
             <label for="dev-name-input">Development Name</label>
-            <input type="text" id="dev-name-input" class="form-input" placeholder="e.g. Proposed Medical Center" required />
+            <input type="text" id="dev-name-input" class="form-input" placeholder="e.g. Proposed Office Tower" required />
           </div>
 
           <div class="form-group">
@@ -386,7 +371,7 @@
           <button id="about-modal-close" class="close-btn" aria-label="Close About System">&times;</button>
         </div>
         <div class="modal-body-about">
-          <p><strong>AI Urban Digital Twin + What-If Simulator v2.0</strong></p>
+          <p><strong>Urban Digital Twin + What-If Simulator v2.5</strong></p>
           <p>Geospatial multi-modal transport and land-use simulation platform powered by Cesium 3D and local ENU metric clearance mathematics.</p>
           <div class="about-meta">
             <div><span>Study Area:</span> District R3, New Administrative Capital</div>
@@ -397,14 +382,7 @@
       </div>
     </div>
 
-    <!-- Error Modal Overlay -->
-    <div id="error-overlay" class="error-modal hidden">
-      <div class="error-content glass-panel-error">
-        <h2 class="error-title">System Error</h2>
-        <p id="error-text" class="error-description">An unexpected error occurred.</p>
-      </div>
-    </div>
-
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
+
