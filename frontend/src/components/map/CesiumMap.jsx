@@ -40,10 +40,10 @@ function CesiumMap() {
 
     viewer.camera.setView({
       destination: Cartesian3.fromDegrees(
-        31.2357,
-        30.0444,
+        31.75,
+        30.01,
         12000
-      ),
+      ),  
       orientation: {
         heading: CesiumMath.toRadians(0),
         pitch: CesiumMath.toRadians(-45),
