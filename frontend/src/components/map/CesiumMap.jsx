@@ -442,7 +442,31 @@ function CesiumMap({
 
     const viewer = viewerRef.current;
 
-    if (!viewer || !proposedDevelopment) {
+    if (!viewer) {
+      return;
+    }
+
+    // -------------------------------------------------------
+    // REMOVE PROPOSED DEVELOPMENT WHEN CLEARED
+    // -------------------------------------------------------
+
+    if (!proposedDevelopment) {
+      const proposedEntities = viewer.entities.values.filter(
+        (entity) =>
+          entity.properties?.type?.getValue() ===
+          "proposed-development",
+      );
+
+      proposedEntities.forEach((entity) => {
+        viewer.entities.remove(entity);
+      });
+
+      viewer.selectedEntity = undefined;
+
+      console.log(
+        "All proposed development entities removed from map.",
+      );
+
       return;
     }
 

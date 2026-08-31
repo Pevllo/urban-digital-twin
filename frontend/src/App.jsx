@@ -363,6 +363,16 @@ function App() {
   };
 
   // =========================================================
+  // CLEAR SELECTED DEVELOPMENT
+  // =========================================================
+
+  useEffect(() => {
+    if (!proposedDevelopment && selectedDevelopment) {
+      setSelectedDevelopment(null);
+    }
+  }, [proposedDevelopment, selectedDevelopment]);
+
+  // =========================================================
   // RENDER
   // =========================================================
 
@@ -686,7 +696,102 @@ function App() {
                   BUILDING
               ================================================= */}
 
-              {selectedBuilding ? (
+              {selectedDevelopment ? (
+                <div className="building-details">
+                  <div className="selected-object-header">
+                    <div className="empty-icon">
+                      <Building2 size={24} />
+                    </div>
+
+                    <div>
+                      <span className="eyebrow">PROPOSED DEVELOPMENT</span>
+
+                      <h4>
+                        {selectedDevelopment.name || "New Development"}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="property-list">
+                    <div className="property">
+                      <span>ID</span>
+
+                      <strong>
+                        {selectedDevelopment.development_id ||
+                          selectedDevelopment.id ||
+                          "—"}
+                      </strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Type</span>
+
+                      <strong>
+                        {selectedDevelopment.development_type || "Unknown"}
+                      </strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Floors</span>
+
+                      <strong>
+                        {selectedDevelopment.floors ?? "—"}
+                      </strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Gross Floor Area</span>
+
+                      <strong>
+                        {Number(
+                          selectedDevelopment.properties
+                            ?.gross_floor_area_sqm ??
+                            selectedDevelopment.gross_floor_area_sqm ??
+                            0,
+                        ).toLocaleString()}{" "}
+                        m²
+                      </strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Latitude</span>
+
+                      <strong>
+                        {Number.isFinite(
+                          Number(selectedDevelopment.latitude),
+                        )
+                          ? Number(selectedDevelopment.latitude).toFixed(6)
+                          : "—"}
+                      </strong>
+                    </div>
+
+                    <div className="property">
+                      <span>Longitude</span>
+
+                      <strong>
+                        {Number.isFinite(
+                          Number(selectedDevelopment.longitude),
+                        )
+                          ? Number(selectedDevelopment.longitude).toFixed(6)
+                          : "—"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <button
+                    className="secondary-button"
+                    onClick={handleDeleteDevelopment}
+                    style={{
+                      background: "#ef4444",
+                      borderColor: "#ef4444",
+                      width: "100%",
+                      marginTop: "16px",
+                    }}
+                  >
+                    Delete Development
+                  </button>
+                </div>
+              ) : selectedBuilding ? (
                 <div className="building-details">
                   <div className="selected-object-header">
                     <div className="empty-icon">
@@ -1319,17 +1424,10 @@ function App() {
                   </button>
                 )}
 
-                {selectedDevelopment && (
-                  <button
-                    className="secondary-button"
-                    onClick={handleDeleteDevelopment}
-                    style={{
-                      background: "#ef4444",
-                      borderColor: "#ef4444",
-                    }}
-                  >
+                {selectedDevelopment && !developmentMode && (
+                  <span style={{ display: "none" }}>
                     Delete Development
-                  </button>
+                  </span>
                 )}
 
                 {!developmentMode && !selectedDevelopment && (
