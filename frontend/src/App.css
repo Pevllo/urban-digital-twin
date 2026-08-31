@@ -679,3 +679,125 @@ button {
   text-align: right;
   word-break: break-word;
 }
+/* =========================================================
+   DEVELOPMENT FORM
+   ========================================================= */
+
+.development-form {
+  width: 100%;
+  margin-top: 20px;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+/* Latitude / Longitude properties */
+
+.development-form .property {
+  min-width: 0;
+}
+
+/* Form labels */
+
+.development-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+
+  min-width: 0;
+
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Inputs and selects */
+
+.development-form input,
+.development-form select {
+  width: 100%;
+  min-height: 40px;
+
+  box-sizing: border-box;
+
+  padding: 9px 11px;
+
+  border: 1px solid #334155;
+  border-radius: 7px;
+
+  background: #0f1b27;
+  color: #e2e8f0;
+
+  font-family: inherit;
+  font-size: 13px;
+
+  outline: none;
+}
+
+/* Select */
+
+.development-form select {
+  cursor: pointer;
+}
+
+/* Focus */
+
+.development-form input:focus,
+.development-form select:focus {
+  border-color: #64748b;
+  box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.15);
+}
+
+/* Placeholder */
+
+.development-form input::placeholder {
+  color: #64748b;
+}
+
+/* Selected location */
+
+.development-form .property {
+  padding: 11px 0;
+}
+
+.development-form .property span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.development-form .property strong {
+  display: block;
+  margin-top: 6px;
+
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+/* =========================================================
+   SIMULATION PANEL
+   ========================================================= */
+
+.simulation-panel {
+  align-items: flex-start;
+}
+
+.simulation-panel > div:first-child {
+  width: 100%;
+  min-width: 0;
+}
+
+.simulation-panel > .secondary-button {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+/* =========================================================
+   RESPONSIVE DEVELOPMENT FORM
+   ========================================================= */
+
+@media (max-width: 800px) {
+  .development-form {
+    grid-template-columns: 1fr;
+  }
+}

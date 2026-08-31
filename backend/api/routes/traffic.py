@@ -47,8 +47,6 @@ def load_traffic_data():
     The API extracts the original OSM way:
 
         90604136
-
-    so the frontend can request traffic using the OSM way ID.
     """
 
     global _traffic_df
@@ -83,12 +81,12 @@ def load_traffic_data():
         ],
     )
 
-    # ---------------------------------------------------------------
-    # Extract original OSM way ID from segmented road ID.
+    # -----------------------------------------------------------------------
+    # Extract original OSM way ID
     #
     # osm_90604136_0 -> 90604136
     # osm_90604136_1 -> 90604136
-    # ---------------------------------------------------------------
+    # -----------------------------------------------------------------------
 
     df["osm_way_id"] = (
         df["road_id"]
@@ -96,9 +94,53 @@ def load_traffic_data():
         .str.extract(r"^osm_(\d+)_")[0]
     )
 
+    # Make sure timestamps are consistently sortable.
+    df["timestamp"] = pd.to_datetime(
+        df["timestamp"],
+        format="mixed",
+    )   
+
     _traffic_df = df
 
     return _traffic_df
+
+
+# ---------------------------------------------------------------------------
+# First observation per traffic segment
+# ---------------------------------------------------------------------------
+
+def get_baseline_segments(df):
+    """
+    Return exactly one baseline observation for each traffic-model segment.
+
+    The synthetic dataset contains 720 hourly observations per segment.
+
+    We use the earliest available observation for each road_id.
+
+    Example:
+
+        osm_90604136_0 -> first observation
+        osm_90604136_1 -> first observation
+        osm_90604136_2 -> first observation
+        osm_90604136_3 -> first observation
+
+    This prevents accidentally summing all 720 hours.
+    """
+
+    baseline = (
+        df
+        .sort_values(
+            ["road_id", "timestamp"]
+        )
+        .groupby(
+            "road_id",
+            as_index=False,
+            sort=False,
+        )
+        .first()
+    )
+
+    return baseline
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +159,8 @@ def get_baseline_traffic(
 
     Multiple traffic-model segments belonging to the same OSM way
     are aggregated together.
+
+    Only the earliest observation of each segment is used.
     """
 
     try:
@@ -128,7 +172,9 @@ def get_baseline_traffic(
             detail=str(exc),
         )
 
-    osm_way_id = str(osm_way_id).strip()
+    osm_way_id = str(
+        osm_way_id
+    ).strip()
 
     if not osm_way_id.isdigit():
         raise HTTPException(
@@ -149,48 +195,71 @@ def get_baseline_traffic(
             ),
         )
 
-    # ---------------------------------------------------------------
-    # Initial baseline timestamp.
-    # ---------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Get one baseline observation per segment.
+    # -----------------------------------------------------------------------
 
-    timestamp = road["timestamp"].min()
+    baseline = get_baseline_segments(
+        road
+    )
 
-    current = road[
-        road["timestamp"] == timestamp
-    ].copy()
-
-    if current.empty:
+    if baseline.empty:
         raise HTTPException(
             status_code=404,
             detail=(
-                f"No traffic observations found for OSM way "
+                f"No baseline traffic observations found for OSM way "
                 f"{osm_way_id}"
             ),
         )
 
-    first = current.iloc[0]
+    # -----------------------------------------------------------------------
+    # Aggregate segments belonging to this OSM way.
+    # -----------------------------------------------------------------------
+
+    traffic_volume = int(
+        baseline["traffic_volume"].sum()
+    )
+
+    road_length_m = float(
+        baseline["road_length_m"].sum()
+    )
+
+    road_capacity_proxy = float(
+        baseline["road_capacity_proxy"].sum()
+    )
+
+    first = baseline.iloc[0]
+
+    # -----------------------------------------------------------------------
+    # Congestion.
+    # -----------------------------------------------------------------------
+
+    congestion_ratio = (
+        traffic_volume
+        / max(road_capacity_proxy, 1.0)
+    )
+
+    congestion_percent = (
+        congestion_ratio * 100.0
+    )
 
     return {
         "osm_way_id": int(osm_way_id),
 
-        "timestamp": timestamp,
+        "timestamp": first["timestamp"].isoformat(),
 
         "segment_count": int(
-            len(current)
+            len(baseline)
         ),
 
-        "traffic_volume": int(
-            current["traffic_volume"].sum()
-        ),
+        "traffic_volume": traffic_volume,
 
         "road_type": first["road_type"],
 
         "road_name": first["road_name"],
 
         "road_length_m": round(
-            float(
-                current["road_length_m"].sum()
-            ),
+            road_length_m,
             1,
         ),
 
@@ -215,9 +284,7 @@ def get_baseline_traffic(
         ),
 
         "road_capacity_proxy": round(
-            float(
-                current["road_capacity_proxy"].sum()
-            ),
+            road_capacity_proxy,
             1,
         ),
 
@@ -233,7 +300,19 @@ def get_baseline_traffic(
             first["connected_road_count"]
         ),
 
-        "road_hierarchy": first["road_hierarchy"],
+        "road_hierarchy": first[
+            "road_hierarchy"
+        ],
+
+        "congestion_ratio": round(
+            congestion_ratio,
+            6,
+        ),
+
+        "congestion_percent": round(
+            congestion_percent,
+            4,
+        ),
 
         "data_type": "synthetic",
     }
@@ -248,9 +327,15 @@ def get_all_baseline_traffic():
     """
     Return baseline synthetic traffic aggregated by OSM way.
 
-    This endpoint is used by the Cesium traffic visualization.
+    The synthetic traffic dataset contains:
 
-    One OSM way can contain multiple traffic-model segments.
+        720 observations per traffic-model segment.
+
+    We first select the earliest observation for EACH segment.
+
+    Then we aggregate those segments back to their original OSM way.
+
+    This produces one baseline record per OSM way.
     """
 
     try:
@@ -262,35 +347,37 @@ def get_all_baseline_traffic():
             detail=str(exc),
         )
 
-    # ---------------------------------------------------------------
-    # Select the first available observation for EACH OSM way.
+    # -----------------------------------------------------------------------
+    # STEP 1
     #
-    # We must not filter the entire dataset using one global timestamp,
-    # because some roads may not have an observation at that exact time.
-    # ---------------------------------------------------------------
+    # Select exactly one observation per traffic-model segment.
+    #
+    # Example:
+    #
+    # osm_90604136_0 -> one row
+    # osm_90604136_1 -> one row
+    # osm_90604136_2 -> one row
+    # osm_90604136_3 -> one row
+    #
+    # Therefore way 90604136 will have 4 rows before aggregation.
+    # -----------------------------------------------------------------------
 
-    df = df.sort_values(
-        ["osm_way_id", "timestamp"]
-    )
-
-    current = (
+    current = get_baseline_segments(
         df
-        .groupby("osm_way_id", as_index=False)
-        .first()
     )
-
-    timestamp = current["timestamp"].min()
 
     if current.empty:
         return {
-            "timestamp": timestamp,
+            "timestamp": None,
             "data_type": "synthetic",
             "roads": [],
         }
 
-    # ---------------------------------------------------------------
-    # Aggregate traffic-model segments by original OSM way.
-    # ---------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # STEP 2
+    #
+    # Aggregate traffic-model segments to OSM way.
+    # -----------------------------------------------------------------------
 
     grouped = (
         current
@@ -303,10 +390,12 @@ def get_all_baseline_traffic():
                 "traffic_volume",
                 "sum",
             ),
+
             road_capacity_proxy=(
                 "road_capacity_proxy",
                 "sum",
             ),
+
             segment_count=(
                 "road_id",
                 "count",
@@ -314,31 +403,41 @@ def get_all_baseline_traffic():
         )
     )
 
-    # ---------------------------------------------------------------
-    # Congestion ratio.
+    # -----------------------------------------------------------------------
+    # STEP 3
     #
-    # Example:
-    #
-    # traffic = 1691
-    # capacity = 8280
-    #
-    # ratio ~= 0.204
-    # percent ~= 20.4%
-    # ---------------------------------------------------------------
+    # Calculate congestion.
+    # -----------------------------------------------------------------------
 
-    grouped["congestion_ratio"] = (
+    grouped[
+        "congestion_ratio"
+    ] = (
         grouped["traffic_volume"]
-        / grouped["road_capacity_proxy"].clip(
-            lower=1
-        )
+        / grouped[
+            "road_capacity_proxy"
+        ].clip(lower=1)
     )
 
-    grouped["congestion_percent"] = (
-        grouped["congestion_ratio"] * 100
+    grouped[
+        "congestion_percent"
+    ] = (
+        grouped[
+            "congestion_ratio"
+        ] * 100
     )
+
+    # -----------------------------------------------------------------------
+    # STEP 4
+    #
+    # Use the earliest baseline timestamp.
+    # -----------------------------------------------------------------------
+
+    timestamp = current[
+        "timestamp"
+    ].min()
 
     return {
-        "timestamp": timestamp,
+        "timestamp": timestamp.isoformat(),
 
         "data_type": "synthetic",
 
