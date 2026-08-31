@@ -1,0 +1,16 @@
+Model,Type,Val MAE,Val RMSE,Val R²,Test MAE,Test RMSE,Test R²,Train Time (s)
+extra_trees,Classical ML,0.8272,1.5872,0.9812,0.7945,1.6254,0.9704,9.633
+TCN,Deep Learning,0.8772,1.5452,0.9823,0.8398,1.478,0.9755,143.7
+random_forest,Classical ML,0.8982,1.6428,0.9799,0.9424,1.9807,0.9561,7.565
+MLP,Deep Learning,0.9127,1.5461,0.9822,0.9719,1.695,0.9678,59.5
+xgboost_tuned,Classical ML,0.9186,1.6893,0.9787,0.7811,1.3426,0.9798,187.908
+GRU,Deep Learning,0.9324,1.7443,0.9775,0.8401,1.5854,0.9718,49.6
+LSTM,Deep Learning,0.9518,1.7641,0.9769,0.8794,1.7119,0.9671,68.8
+hist_gradient_boosting,Classical ML,0.9864,1.7038,0.9783,1.0754,1.9359,0.958,186.859
+lightgbm_tuned,Classical ML,1.0184,1.6952,0.9786,1.0036,1.8711,0.9608,112.129
+ridge,Classical ML,3.974,6.2315,0.7104,3.0775,4.8105,0.741,0.455
+linear_regression,Classical ML,3.9743,6.2306,0.7104,3.079,4.81,0.741,0.658
+lasso,Classical ML,4.0708,6.4697,0.6878,3.105,4.9577,0.7249,13.266
+elasticnet,Classical ML,4.1042,6.5113,0.6838,3.1316,4.9822,0.7221,18.464
+median_baseline,Classical ML,7.1371,12.624,-0.1887,5.4282,9.8751,-0.0916,0.385
+mean_baseline,Classical ML,7.4605,11.6934,-0.0199,6.5733,9.4668,-0.0032,0.399

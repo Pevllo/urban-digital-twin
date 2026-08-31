@@ -52,3 +52,13 @@ trip-demand-model/data/raw/trip_production_300k.csv
 
 # Backup directory — local only
 trip-demand-model/files 5/
+
+# === water-demand-model: large files (too big for GitHub) ===
+models/water-demand-model/models/water_demand_model.joblib
+models/water-demand-model/models/dl_models.joblib
+models/water-demand-model/data/raw/water_demand_dataset.csv
+
+# === solid-waste-model: large files (too big for GitHub) ===
+models/solid-waste-model/models/solid_waste_model.joblib
+models/solid-waste-model/models/solid_waste_label_encoder.joblib
+models/solid-waste-model/data/raw/solid_waste_dataset.csv

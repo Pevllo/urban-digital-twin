@@ -1,0 +1,4 @@
+models/water-demand-model/models/*.joblib filter=lfs diff=lfs merge=lfs -text
+models/solid-waste-model/models/*.joblib filter=lfs diff=lfs merge=lfs -text
+models/solid-waste-model/data/raw/*.csv filter=lfs diff=lfs merge=lfs -text
+models/water-demand-model/data/raw/*.csv filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,372 @@
+======================================================================
+WATER DEMAND DATASET — COMPREHENSIVE INSPECTION
+======================================================================
+
+Shape: 100,800 rows x 41 columns
+
+Columns (41):
+   0. record_id                                dtype=object
+   1. development_id                           dtype=object
+   2. development_type                         dtype=object
+   3. zone_id                                  dtype=object
+   4. name                                     dtype=object
+   5. date                                     dtype=object
+   6. year                                     dtype=int64
+   7. month                                    dtype=int64
+   8. day                                      dtype=int64
+   9. day_of_week                              dtype=int64
+  10. hour                                     dtype=int64
+  11. is_weekend                               dtype=int64
+  12. temperature_c                            dtype=float64
+  13. num_residents                            dtype=float64
+  14. num_units                                dtype=float64
+  15. num_beds                                 dtype=float64
+  16. staff_count                              dtype=float64
+  17. num_students                             dtype=float64
+  18. num_employees                            dtype=float64
+  19. gross_leasable_area_sqm                  dtype=float64
+  20. visitor_capacity                         dtype=float64
+  21. gross_floor_area_sqm                     dtype=float64
+  22. floors                                   dtype=int64
+  23. water_demand_liters                      dtype=float64
+  24. water_demand_m3                          dtype=float64
+  25. data_origin                              dtype=object
+  26. hour_sin                                 dtype=float64
+  27. hour_cos                                 dtype=float64
+  28. dow_sin                                  dtype=float64
+  29. dow_cos                                  dtype=float64
+  30. month_sin                                dtype=float64
+  31. month_cos                                dtype=float64
+  32. cooling_degree                           dtype=float64
+  33. heating_degree                           dtype=float64
+  34. log1p_num_residents                      dtype=float64
+  35. log1p_num_beds                           dtype=float64
+  36. log1p_num_students                       dtype=float64
+  37. log1p_num_employees                      dtype=float64
+  38. log1p_gross_leasable_area_sqm            dtype=float64
+  39. log1p_gross_floor_area_sqm               dtype=float64
+  40. activity_x_cooling                       dtype=float64
+
+--- Missing Values ---
+Total missing: 0
+
+--- Duplicates ---
+Full row duplicates: 0
+record_id duplicates: 0
+
+--- Data Types ---
+record_id                         object
+development_id                    object
+development_type                  object
+zone_id                           object
+name                              object
+date                              object
+year                               int64
+month                              int64
+day                                int64
+day_of_week                        int64
+hour                               int64
+is_weekend                         int64
+temperature_c                    float64
+num_residents                    float64
+num_units                        float64
+num_beds                         float64
+staff_count                      float64
+num_students                     float64
+num_employees                    float64
+gross_leasable_area_sqm          float64
+visitor_capacity                 float64
+gross_floor_area_sqm             float64
+floors                             int64
+water_demand_liters              float64
+water_demand_m3                  float64
+data_origin                       object
+hour_sin                         float64
+hour_cos                         float64
+dow_sin                          float64
+dow_cos                          float64
+month_sin                        float64
+month_cos                        float64
+cooling_degree                   float64
+heating_degree                   float64
+log1p_num_residents              float64
+log1p_num_beds                   float64
+log1p_num_students               float64
+log1p_num_employees              float64
+log1p_gross_leasable_area_sqm    float64
+log1p_gross_floor_area_sqm       float64
+activity_x_cooling               float64
+
+--- Numeric Summary ---
+           year        month          day  day_of_week         hour   is_weekend  temperature_c  num_residents    num_units     num_beds  staff_count  num_students  num_employees  gross_leasable_area_sqm  visitor_capacity  gross_floor_area_sqm      floors  water_demand_liters  water_demand_m3     hour_sin     hour_cos      dow_sin      dow_cos    month_sin    month_cos  cooling_degree  heating_degree  log1p_num_residents  log1p_num_beds  log1p_num_students  log1p_num_employees  log1p_gross_leasable_area_sqm  log1p_gross_floor_area_sqm  activity_x_cooling
+count  100800.0  100800.0000  100800.0000     100800.0  100800.0000  100800.0000    100800.0000    100800.0000  100800.0000  100800.0000  100800.0000   100800.0000    100800.0000              100800.0000       100800.0000           100800.0000  100800.000          100800.0000      100800.0000  100800.0000  100800.0000  100800.0000  100800.0000  100800.0000  100800.0000     100800.0000     100800.0000          100800.0000     100800.0000         100800.0000          100800.0000                    100800.0000                 100800.0000         100800.0000
+mean     2024.0       6.9131      15.6907          3.0      11.5000       0.2857        23.4373       130.5133      43.4800      67.6133     175.9133      282.0933       190.7600                8867.3333         7075.1067            26041.9506       7.840            7409.3891           7.4094      -0.0000      -0.0000      -0.0000      -0.0000      -0.0447      -0.0823          3.1102          0.4911               1.2530          1.1311              1.4276               1.3110                         2.0999                      9.7901             22.3207
+std         0.0       3.2045       8.8488          2.0       6.9222       0.4518         5.2982       311.3094     102.2808     152.1641     345.8322      631.2826       469.7873               20505.5419        17109.6208            22249.0086       6.157            9649.7654           9.6498       0.7071       0.7071       0.7071       0.7071       0.7562       0.6476          3.2488          1.2314               2.5264          2.2820              2.8640               2.6524                         4.2118                      0.9231             24.1407
+min      2024.0       1.0000       1.0000          0.0       0.0000       0.0000         9.4100         0.0000       0.0000       0.0000       0.0000        0.0000         0.0000                   0.0000            0.0000             1384.5076       2.000               5.9700           0.0060      -1.0000      -1.0000      -0.9749      -0.9010      -1.0000      -1.0000          0.0000          0.0000               0.0000          0.0000              0.0000               0.0000                         0.0000                      7.2338              0.0000
+25%      2024.0       4.0000       8.0000          1.0       5.7500       0.0000        19.0300         0.0000       0.0000       0.0000       0.0000        0.0000         0.0000                   0.0000            0.0000             8970.4808       4.000            1174.7900           1.1748      -0.7071      -0.7071      -0.7818      -0.9010      -0.8660      -0.5000          0.0000          0.0000               0.0000          0.0000              0.0000               0.0000                         0.0000                      9.1018              0.0000
+50%      2024.0       7.0000      16.0000          3.0      11.5000       0.0000        24.2100         0.0000       0.0000       0.0000       0.0000        0.0000         0.0000                   0.0000            0.0000            20014.1109       6.000            3663.5750           3.6636       0.0000      -0.0000       0.0000      -0.2225       0.0000      -0.0000          2.2100          0.0000               0.0000          0.0000              0.0000               0.0000                         0.0000                      9.9042             15.0010
+75%      2024.0      10.0000      23.0000          5.0      17.2500       1.0000        27.9900         0.0000       0.0000       0.0000     150.0000        0.0000         0.0000                   0.0000            0.0000            35630.2469      11.000           10037.8850          10.0379       0.7071       0.7071       0.7818       0.6235       0.8660       0.5000          5.9900          0.0000               0.0000          0.0000              0.0000               0.0000                         0.0000                     10.4810             41.0483
+max      2024.0      12.0000      31.0000          6.0      23.0000       1.0000        34.4100      1341.0000     393.0000     566.0000    1685.0000     2442.0000      1998.0000               79418.0000        86522.0000            99739.1457      29.000           82289.8800          82.2899       1.0000       1.0000       0.9749       1.0000       1.0000       1.0000         12.4100          8.5900               7.2019          6.3404              7.8010               7.6004                        11.2825                     11.5103            123.3671
+
+--- Target Variable: water_demand_m3 ---
+  Min:     0.0060
+  Max:     82.2899
+  Mean:    7.4094
+  Median:  3.6636
+  Std:     9.6498
+  Skew:    2.4968
+  Kurt:    7.5803
+  Zeros:   0 (0.00%)
+  Neg:     0
+  P1:      0.0463
+  P5:      0.1676
+  P25:     1.1748
+  P50:     3.6636
+  P75:     10.0379
+  P95:     26.9663
+  P99:     47.8431
+
+--- Leakage Check ---
+  water_demand_liters corr with water_demand_m3: 1.000000
+  water_demand_liters == water_demand_m3 * 1000: False
+
+--- Categorical Columns ---
+
+  record_id: 100800 unique
+
+  development_id: 150 unique
+
+  development_type: 5 unique
+    residential_compound: 20160
+    hospital: 20160
+    mall: 20160
+    school: 20160
+    office: 20160
+
+  zone_id: 24 unique
+    Z21: 7392
+    Z15: 6720
+    Z24: 6048
+    Z19: 6048
+    Z06: 6048
+    Z04: 6048
+    Z17: 5376
+    Z02: 4704
+    Z22: 4704
+    Z08: 4032
+    Z03: 4032
+    Z01: 4032
+    Z11: 4032
+    Z13: 4032
+    Z18: 3360
+    Z10: 3360
+    Z05: 3360
+    Z23: 3360
+    Z07: 3360
+    Z16: 2688
+    Z09: 2688
+    Z20: 2016
+    Z12: 2016
+    Z14: 1344
+
+  name: 150 unique
+
+  date: 361 unique
+
+  data_origin: 1 unique
+    derived: 100800
+
+--- DateTime Analysis ---
+  Date range: 2024-01-01 00:00:00 to 2024-12-26 00:00:00
+  Unique dates: 361
+  Unique hours: 24 (range 0-23)
+  Records per dev: 24
+  Days per dev: count    150.0
+mean      28.0
+std        0.0
+min       28.0
+25%       28.0
+50%       28.0
+75%       28.0
+max       28.0
+  Unique developments: 150
+  Unique zones: 24
+
+--- Hourly Demand Pattern ---
+        mean     std    min     max  median
+hour                                       
+0      2.427   3.272  0.006  15.614   0.972
+1      2.042   2.724  0.006  13.012   0.781
+2      1.990   2.732  0.006  13.012   0.711
+3      1.990   2.732  0.006  13.012   0.711
+4      2.804   3.362  0.012  15.614   1.248
+5      4.586   4.830  0.024  20.819   2.446
+6      7.768   7.488  0.048  36.573   4.718
+7     10.694  10.351  0.072  54.860   6.886
+8     12.590  13.300  0.096  73.147   8.200
+9     12.959  14.904  0.107  82.290   8.113
+10    12.194  14.168  0.102  77.718   7.228
+11    11.688  13.355  0.096  73.147   6.992
+12    11.311  12.514  0.090  68.575   7.098
+13    10.676  11.762  0.084  64.003   6.483
+14    10.040  11.027  0.078  59.432   5.930
+15     9.663  10.229  0.072  54.860   5.901
+16     9.545   9.454  0.066  50.288   6.050
+17     9.426   8.845  0.060  45.717   6.090
+18     9.050   8.286  0.054  41.145   5.803
+19     7.523   6.819  0.042  32.002   4.676
+20     5.997   5.454  0.030  22.858   3.500
+21     4.470   4.290  0.018  18.216   2.342
+22     3.706   3.975  0.012  18.216   1.802
+23     2.685   3.348  0.006  15.614   1.142
+
+--- Daily of Week Pattern ---
+              mean     std  count
+day_of_week                      
+0            7.459   9.076  14400
+1            7.467   9.107  14400
+2            7.521   9.233  14400
+3            7.569   9.214  14400
+4            7.491   9.104  14400
+5            7.177  10.796  14400
+6            7.181  10.809  14400
+
+--- Monthly Pattern ---
+        mean     std  count
+month                      
+1      7.994   9.512   4032
+2      6.701   9.880   6696
+3      6.630   9.713   7680
+4      7.089   8.838   8232
+5      7.015   9.978  11352
+6      5.235   4.903   9096
+7      8.686   7.562   7176
+8      8.661   9.580   8496
+9      8.426   9.448   8424
+10     9.046  12.818  12432
+11     5.836   8.365  12432
+12     8.695  11.581   4752
+
+--- Weekend vs Weekday ---
+             mean     std  count
+is_weekend                      
+0           7.502   9.147  72000
+1           7.179  10.802  28800
+
+--- Development Type Distribution ---
+                        mean     std    min  median     max  count
+development_type                                                  
+hospital              10.858   6.009  0.791  10.828  28.626  20160
+mall                  16.414  15.672  0.219  10.486  82.290  20160
+office                 2.053   2.581  0.006   0.900  14.691  20160
+residential_compound   5.203   4.397  0.144   3.771  23.899  20160
+school                 2.519   2.729  0.023   1.431  14.918  20160
+
+--- Top Correlations with Target ---
+  water_demand_liters                      +1.0000
+  gross_floor_area_sqm                     +0.6605
+  gross_leasable_area_sqm                  +0.5949
+  log1p_gross_floor_area_sqm               +0.5837
+  visitor_capacity                         +0.5598
+  log1p_gross_leasable_area_sqm            +0.4929
+  num_beds                                 +0.2671
+  staff_count                              +0.2324
+  log1p_num_beds                           +0.2069
+  activity_x_cooling                       +0.0971
+  hour                                     +0.0789
+  month                                    +0.0357
+  temperature_c                            +0.0270
+  cooling_degree                           +0.0261
+  dow_sin                                  +0.0124
+  heating_degree                           +0.0026
+  day                                      -0.0027
+  dow_cos                                  -0.0052
+  day_of_week                              -0.0107
+  hour_sin                                 -0.0130
+  is_weekend                               -0.0151
+  num_residents                            -0.0187
+  month_cos                                -0.0199
+  num_units                                -0.0243
+  month_sin                                -0.0587
+  log1p_num_residents                      -0.0964
+  num_employees                            -0.1890
+  floors                                   -0.2021
+  num_students                             -0.2027
+  log1p_num_students                       -0.2486
+  log1p_num_employees                      -0.2657
+  hour_cos                                 -0.3689
+  year                                     +nan
+
+--- Correlation Matrix (top features) ---
+                               water_demand_liters  gross_floor_area_sqm  gross_leasable_area_sqm  log1p_gross_floor_area_sqm  visitor_capacity  log1p_gross_leasable_area_sqm  num_beds  staff_count  water_demand_m3
+water_demand_liters                          1.000                 0.661                    0.595                       0.584             0.560                          0.493     0.267        0.232            1.000
+gross_floor_area_sqm                         0.661                 1.000                    0.837                       0.890             0.779                          0.685     0.020       -0.029            0.661
+gross_leasable_area_sqm                      0.595                 0.837                    1.000                       0.596             0.941                          0.899    -0.192       -0.220            0.595
+log1p_gross_floor_area_sqm                   0.584                 0.890                    0.596                       1.000             0.561                          0.529     0.153        0.106            0.584
+visitor_capacity                             0.560                 0.779                    0.941                       0.561             1.000                          0.858    -0.184       -0.210            0.560
+log1p_gross_leasable_area_sqm                0.493                 0.685                    0.899                       0.529             0.858                          1.000    -0.222       -0.254            0.493
+num_beds                                     0.267                 0.020                   -0.192                       0.153            -0.184                         -0.222     1.000        0.962            0.267
+staff_count                                  0.232                -0.029                   -0.220                       0.106            -0.210                         -0.254     0.962        1.000            0.232
+water_demand_m3                              1.000                 0.661                    0.595                       0.584             0.560                          0.493     0.267        0.232            1.000
+
+--- Records per Development ---
+  Min: 672, Max: 672, Mean: 672.0, Std: 0.0
+
+--- Zone Distribution ---
+           mean  count
+zone_id               
+Z12      16.563   2016
+Z14      12.504   1344
+Z22      12.173   4704
+Z11      12.081   4032
+Z08      10.610   4032
+Z20       9.831   2016
+Z16       9.565   2688
+Z15       8.021   6720
+Z09       7.974   2688
+Z07       7.808   3360
+Z10       7.737   3360
+Z01       7.282   4032
+Z18       7.278   3360
+Z05       6.417   3360
+Z24       6.340   6048
+Z06       6.330   6048
+Z21       6.278   7392
+Z03       6.160   4032
+Z19       5.940   6048
+Z04       5.552   6048
+Z17       5.196   5376
+Z23       5.094   3360
+Z02       4.767   4704
+Z13       3.620   4032
+
+--- Temperature Stats ---
+  Min: 9.4, Max: 34.4, Mean: 23.4, Std: 5.3
+
+--- Type x Hour Interaction ---
+development_type  hospital   mall  office  residential_compound  school
+hour                                                                   
+0                     7.66   1.98    0.25                  1.94    0.30
+1                     6.39   1.98    0.25                  1.29    0.30
+2                     6.39   1.98    0.25                  1.03    0.30
+3                     6.39   1.98    0.25                  1.03    0.30
+4                     7.66   3.96    0.50                  1.29    0.61
+5                    10.22   7.92    0.99                  2.59    1.22
+6                    12.77  15.84    1.98                  5.82    2.43
+7                    14.05  23.75    2.97                  9.05    3.65
+8                    14.05  31.67    3.96                  8.40    4.86
+9                    12.77  35.63    4.46                  6.46    5.47
+10                   12.77  33.65    4.21                  5.17    5.16
+11                   12.77  31.67    3.96                  5.17    4.86
+12                   12.77  29.69    3.71                  5.82    4.56
+13                   12.77  27.71    3.47                  5.17    4.25
+14                   12.77  25.73    3.22                  4.52    3.95
+15                   12.77  23.75    2.97                  5.17    3.65
+16                   12.77  21.77    2.72                  7.11    3.34
+17                   12.77  19.80    2.48                  9.05    3.04
+18                   12.77  17.82    2.23                  9.70    2.73
+19                   11.50  13.86    1.73                  8.40    2.13
+20                   10.22   9.90    1.24                  7.11    1.52
+21                    8.94   5.94    0.74                  5.82    0.91
+22                    8.94   3.96    0.50                  4.52    0.61
+23                    7.66   1.98    0.25                  3.23    0.30
