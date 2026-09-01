@@ -385,6 +385,8 @@ function CesiumMap({
 
     viewerRef.current = viewer;
 
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+
     // =======================================================
     // CAMERA — fetch config from backend, fallback to defaults
     // =======================================================
@@ -850,10 +852,10 @@ function CesiumMap({
 
       position: Cartesian3.fromDegrees(longitude, latitude, height / 2),
 
-      heightReference: HeightReference.RELATIVE_TO_GROUND,
-
       box: {
         dimensions: new Cartesian3(footprintWidth, footprintDepth, height),
+
+        heightReference: HeightReference.RELATIVE_TO_GROUND,
 
         material: Color.fromCssColorString("#38bdf8").withAlpha(0.35),
 
