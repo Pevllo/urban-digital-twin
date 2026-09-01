@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 import {
   Viewer,
@@ -8,12 +8,19 @@ import {
   Math as CesiumMath,
   Color,
   ScreenSpaceEventType,
+  createOsmBuildingsAsync,
+  HeightReference,
 } from "cesium";
 
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./CesiumMap.css";
 
 import spatialData from "../../data/spatialFeatures.json";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+const MAX_AUTO_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 2000;
 
 function CesiumMap({
   onBuildingSelect,
@@ -22,6 +29,8 @@ function CesiumMap({
   onDevelopmentSelect,
   developmentMode,
   proposedDevelopment,
+  scenarioImpact,
+  layerVisibility,
 }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
@@ -32,8 +41,19 @@ function CesiumMap({
   const developmentSelectRef = useRef(onDevelopmentSelect);
 
   const [trafficData, setTrafficData] = useState({});
+  const [trafficLoading, setTrafficLoading] = useState(true);
+  const [trafficError, setTrafficError] = useState(null);
+  const [trafficLoaded, setTrafficLoaded] = useState(false);
+  const [trafficRoadCount, setTrafficRoadCount] = useState(0);
+
+  const retryTimeoutRef = useRef(null);
+  const cancelledRef = useRef(false);
+  const attemptsRef = useRef(0);
 
   const developmentModeRef = useRef(developmentMode);
+  const scenarioImpactRef = useRef(scenarioImpact);
+  const layerVisibilityRef = useRef(layerVisibility);
+  const osmBuildingsRef = useRef(null);
 
   // =========================================================
   // KEEP CALLBACK REFERENCES UP TO DATE
@@ -49,55 +69,137 @@ function CesiumMap({
     developmentSelectRef.current = onDevelopmentSelect;
 
     developmentModeRef.current = developmentMode;
-  }, [onBuildingSelect, onRoadSelect, onMapLocationSelect, onDevelopmentSelect, developmentMode]);
+
+    scenarioImpactRef.current = scenarioImpact;
+
+    layerVisibilityRef.current = layerVisibility;
+  }, [onBuildingSelect, onRoadSelect, onMapLocationSelect, onDevelopmentSelect, developmentMode, scenarioImpact, layerVisibility]);
 
   // =========================================================
-  // LOAD TRAFFIC DATA
+  // LAYER TOGGLE EFFECT
   // =========================================================
 
   useEffect(() => {
-    let cancelled = false;
+    const viewer = viewerRef.current;
+    if (!viewer || !layerVisibility) return;
 
-    async function loadTraffic() {
-      try {
-        const response = await fetch(
-          "http://127.0.0.1:8000/api/v1/traffic/baseline/all",
-        );
-
-        if (!response.ok) {
-          throw new Error(`Traffic request failed: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (cancelled) {
-          return;
-        }
-
-        const lookup = {};
-
-        for (const road of data.roads || []) {
-          lookup[String(road.osm_way_id)] = road;
-        }
-
-        setTrafficData(lookup);
-
-        console.log(
-          `Loaded traffic data for ${Object.keys(lookup).length} OSM roads.`,
-        );
-
-        console.log("SAMPLE TRAFFIC:", Object.values(lookup).slice(0, 5));
-      } catch (error) {
-        console.error("Failed to load traffic data:", error);
+    viewer.entities.values.forEach((entity) => {
+      const type = entity.properties?.type?.getValue?.();
+      if (type === "building" && layerVisibility.buildings !== undefined) {
+        entity.show = layerVisibility.buildings;
+      } else if (type === "road" && layerVisibility.roads !== undefined) {
+        entity.show = layerVisibility.roads;
       }
+    });
+
+    const osmTileset = osmBuildingsRef.current;
+    if (osmTileset && layerVisibility.buildings !== undefined) {
+      osmTileset.show = layerVisibility.buildings;
+    }
+  }, [layerVisibility]);
+
+  // =========================================================
+  // FETCH TRAFFIC DATA
+  // =========================================================
+
+  const fetchTraffic = useCallback(async () => {
+    if (cancelledRef.current) {
+      return;
     }
 
-    loadTraffic();
+    setTrafficLoading(true);
+    setTrafficError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/v1/traffic/baseline/all`,
+      );
+
+      if (!response.ok) {
+        throw new Error(`Traffic request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (cancelledRef.current) {
+        return;
+      }
+
+      const lookup = {};
+
+      for (const road of data.roads || []) {
+        lookup[String(road.osm_way_id)] = road;
+      }
+
+      const count = Object.keys(lookup).length;
+
+      setTrafficData(lookup);
+      setTrafficRoadCount(count);
+      setTrafficLoaded(true);
+      setTrafficError(null);
+      attemptsRef.current = 0;
+
+      console.log(`Loaded traffic data for ${count} OSM roads.`);
+    } catch (error) {
+      if (cancelledRef.current) {
+        return;
+      }
+
+      console.error("Failed to load traffic data:", error);
+
+      attemptsRef.current += 1;
+
+      if (attemptsRef.current < MAX_AUTO_RETRIES) {
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attemptsRef.current - 1);
+
+        console.log(
+          `Retrying traffic fetch in ${delay}ms (attempt ${attemptsRef.current + 1}/${MAX_AUTO_RETRIES})`,
+        );
+
+        retryTimeoutRef.current = setTimeout(() => {
+          if (!cancelledRef.current) {
+            fetchTraffic();
+          }
+        }, delay);
+      } else {
+        setTrafficLoading(false);
+        setTrafficError(
+          "Traffic data unavailable. Check that the backend is running.",
+        );
+        setTrafficLoaded(false);
+      }
+    }
+  }, []);
+
+  const handleManualRetry = useCallback(() => {
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
+    attemptsRef.current = 0;
+    fetchTraffic();
+  }, [fetchTraffic]);
+
+  // =========================================================
+  // LOAD TRAFFIC ON MOUNT
+  // =========================================================
+
+  useEffect(() => {
+    cancelledRef.current = false;
+    attemptsRef.current = 0;
+
+    fetchTraffic();
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
+
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
     };
-  }, []);
+  }, [fetchTraffic]);
 
   // =========================================================
   // UPDATE ROAD COLORS AFTER TRAFFIC LOADS
@@ -109,12 +211,6 @@ function CesiumMap({
     }
 
     const viewer = viewerRef.current;
-
-    console.log(
-      "TRAFFIC COLOR UPDATE:",
-      Object.keys(trafficData).length,
-      "traffic roads",
-    );
 
     viewer.entities.values.forEach((entity) => {
       if (entity.properties?.type?.getValue() !== "road") {
@@ -136,6 +232,95 @@ function CesiumMap({
       }
     });
   }, [trafficData]);
+
+  // =========================================================
+  // SCENARIO IMPACT COLORING
+  //
+  // When a simulation result exists, affected roads receive
+  // scenario-impact visualization.  Unaffected roads keep
+  // their baseline traffic color.
+  // =========================================================
+
+  useEffect(() => {
+    if (!viewerRef.current) {
+      return;
+    }
+
+    const viewer = viewerRef.current;
+
+    // -------------------------------------------------------
+    // Build way-level impact lookup from stage4 road_assessments.
+    //
+    // Backend road_ids are segment-level: osm_543053794_0
+    // Cesium entity IDs are way-level:   way_543053794
+    //
+    // When multiple segments map to the same way we keep
+    // the worst severity.
+    // -------------------------------------------------------
+
+    const SEVERITY_RANK = { LOW: 0, MODERATE: 1, HIGH: 2, CRITICAL: 3 };
+
+    const wayImpact = {};
+
+    const assessments = scenarioImpact?.road_assessments || [];
+
+    for (const a of assessments) {
+      const rawId = a.road_id || "";
+
+      // Strip "osm_" prefix and segment suffix: osm_543053794_0 -> 543053794
+      const match = rawId.match(/^osm_(\d+)/);
+
+      if (!match) {
+        continue;
+      }
+
+      const wayId = match[1];
+      const sev = a.impact_severity || "LOW";
+      const rank = SEVERITY_RANK[sev] ?? 0;
+
+      if (!wayImpact[wayId] || rank > SEVERITY_RANK[wayImpact[wayId].severity]) {
+        wayImpact[wayId] = {
+          severity: sev,
+          scenario_vc: a.scenario_vc || 0,
+          delta_traffic: a.delta_traffic_veh_h || 0,
+        };
+      }
+    }
+
+    const hasScenario = assessments.length > 0;
+
+    // -------------------------------------------------------
+    // Update road entity colors
+    // -------------------------------------------------------
+
+    viewer.entities.values.forEach((entity) => {
+      if (entity.properties?.type?.getValue() !== "road") {
+        return;
+      }
+
+      const entityId = String(entity.id);
+      const osmWayId = entityId.replace("way_", "");
+
+      let color;
+
+      if (hasScenario && wayImpact[osmWayId]) {
+        // Affected road — use scenario impact color
+        color = getScenarioImpactColor(wayImpact[osmWayId].severity);
+      } else {
+        // Unaffected or no scenario — use baseline traffic color
+        const traffic = trafficData[osmWayId];
+        color = traffic
+          ? getTrafficColor(traffic.congestion_percent)
+          : getRoadColor(
+              entity.properties?.highway?.getValue() || "default",
+            );
+      }
+
+      if (entity.polyline) {
+        entity.polyline.material = color;
+      }
+    });
+  }, [scenarioImpact, trafficData]);
 
   // =========================================================
   // INITIALIZE CESIUM VIEWER
@@ -168,20 +353,41 @@ function CesiumMap({
     viewerRef.current = viewer;
 
     // =======================================================
-    // NAC CAMERA
+    // CAMERA — fetch config from backend, fallback to defaults
     // =======================================================
 
-    viewer.camera.setView({
+    const fallbackCamera = {
       destination: Cartesian3.fromDegrees(31.75, 30.01, 12000),
-
       orientation: {
         heading: CesiumMath.toRadians(0),
-
         pitch: CesiumMath.toRadians(-45),
-
         roll: 0,
       },
-    });
+    };
+
+    const applyCamera = (config) => {
+      const lat = config.center?.latitude ?? 30.01;
+      const lon = config.center?.longitude ?? 31.75;
+      const height = config.center?.height ?? 12000;
+      const heading = config.default_heading ?? 0;
+      const pitch = config.default_pitch ?? -45;
+
+      viewer.camera.setView({
+        destination: Cartesian3.fromDegrees(lon, lat, height),
+        orientation: {
+          heading: CesiumMath.toRadians(heading),
+          pitch: CesiumMath.toRadians(pitch),
+          roll: 0,
+        },
+      });
+    };
+
+    fetch(`${API_BASE}/api/v1/map/config`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then(applyCamera)
+      .catch(() => {
+        viewer.camera.setView(fallbackCamera);
+      });
 
     // =======================================================
     // BUILDINGS
@@ -212,6 +418,8 @@ function CesiumMap({
 
           extrudedHeight: height,
 
+          heightReference: HeightReference.CLAMP_TO_GROUND,
+
           material: Color.fromCssColorString("#64748b").withAlpha(0.85),
 
           outline: true,
@@ -231,6 +439,23 @@ function CesiumMap({
           radius: building.radius,
         },
       });
+    });
+
+    // =======================================================
+    // OSM BUILDINGS (3D Tiles)
+    // =======================================================
+
+    createOsmBuildingsAsync().then((tileset) => {
+      if (viewer.isDestroyed()) {
+        return;
+      }
+      tileset.heightReference = HeightReference.CLAMP_TO_GROUND;
+      osmBuildingsRef.current = tileset;
+      viewer.scene.primitives.add(tileset);
+      const vis = layerVisibilityRef.current;
+      if (vis && vis.buildings === false) {
+        tileset.show = false;
+      }
     });
 
     // =======================================================
@@ -427,6 +652,7 @@ function CesiumMap({
       }
 
       viewerRef.current = null;
+      osmBuildingsRef.current = null;
     };
   }, []);
 
@@ -605,10 +831,120 @@ function CesiumMap({
   }, [proposedDevelopment]);
 
   // =========================================================
-  // MAP CONTAINER
+  // TRAFFIC STATUS INDICATOR
   // =========================================================
 
-  return <div ref={containerRef} className="cesium-map" />;
+  let statusContent;
+
+  if (trafficLoading) {
+    statusContent = (
+      <div className="traffic-status traffic-status--loading">
+        <span className="traffic-status__dot traffic-status__dot--pulse" />
+        Loading traffic data...
+      </div>
+    );
+  } else if (trafficLoaded) {
+    statusContent = (
+      <div className="traffic-status traffic-status--ok">
+        <span className="traffic-status__dot traffic-status__dot--green" />
+        Traffic data loaded · {trafficRoadCount.toLocaleString()} roads
+      </div>
+    );
+  } else if (trafficError) {
+    statusContent = (
+      <div className="traffic-status traffic-status--error">
+        <span className="traffic-status__dot traffic-status__dot--red" />
+        {trafficError}
+        <button
+          className="traffic-status__retry"
+          onClick={handleManualRetry}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // =========================================================
+  // SCENARIO LEGEND (only shown when simulation result exists)
+  // =========================================================
+
+  const impactAssessments = scenarioImpact?.road_assessments || [];
+  const showLegend = impactAssessments.length > 0;
+
+  let legendContent = null;
+
+  if (showLegend) {
+    const severityCounts = { CRITICAL: 0, HIGH: 0, MODERATE: 0, LOW: 0 };
+
+    for (const a of impactAssessments) {
+      const s = a.impact_severity || "LOW";
+      if (s in severityCounts) {
+        severityCounts[s]++;
+      }
+    }
+
+    legendContent = (
+      <div className="scenario-legend">
+        <div className="scenario-legend__title">Scenario Impact</div>
+        {severityCounts.CRITICAL > 0 && (
+          <div className="scenario-legend__item">
+            <span
+              className="scenario-legend__swatch"
+              style={{ background: "#dc2626" }}
+            />
+            Critical ({severityCounts.CRITICAL})
+          </div>
+        )}
+        {severityCounts.HIGH > 0 && (
+          <div className="scenario-legend__item">
+            <span
+              className="scenario-legend__swatch"
+              style={{ background: "#f97316" }}
+            />
+            High ({severityCounts.HIGH})
+          </div>
+        )}
+        {severityCounts.MODERATE > 0 && (
+          <div className="scenario-legend__item">
+            <span
+              className="scenario-legend__swatch"
+              style={{ background: "#eab308" }}
+            />
+            Moderate ({severityCounts.MODERATE})
+          </div>
+        )}
+        {severityCounts.LOW > 0 && (
+          <div className="scenario-legend__item">
+            <span
+              className="scenario-legend__swatch"
+              style={{ background: "#22c55e" }}
+            />
+            Low ({severityCounts.LOW})
+          </div>
+        )}
+        <div className="scenario-legend__item scenario-legend__item--muted">
+          <span
+            className="scenario-legend__swatch"
+            style={{ background: "#64748b" }}
+          />
+          Unaffected
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================
+  // MAP CONTAINER + OVERLAY
+  // =========================================================
+
+  return (
+    <div className="cesium-map-wrapper">
+      <div ref={containerRef} className="cesium-map" />
+      {statusContent}
+      {legendContent}
+    </div>
+  );
 }
 
 // ===========================================================
@@ -714,6 +1050,32 @@ function getTrafficColor(congestionPercent) {
   }
 
   return Color.fromCssColorString("#ef4444");
+}
+
+// ===========================================================
+// SCENARIO IMPACT COLOR
+//
+// Backend severity levels:
+//   CRITICAL, HIGH, MODERATE, LOW
+// ===========================================================
+
+function getScenarioImpactColor(severity) {
+  switch (severity) {
+    case "CRITICAL":
+      return Color.fromCssColorString("#dc2626");
+
+    case "HIGH":
+      return Color.fromCssColorString("#f97316");
+
+    case "MODERATE":
+      return Color.fromCssColorString("#eab308");
+
+    case "LOW":
+      return Color.fromCssColorString("#22c55e");
+
+    default:
+      return Color.fromCssColorString("#64748b");
+  }
 }
 
 export default CesiumMap;

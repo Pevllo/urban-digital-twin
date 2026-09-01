@@ -641,6 +641,7 @@ button {
 }
 .building-details {
   padding: 24px;
+  min-width: 0;
 }
 
 .selected-object-header {
@@ -800,4 +801,316 @@ button {
   .development-form {
     grid-template-columns: 1fr;
   }
+}
+
+/* =========================================================
+   SIMULATION RESULTS
+   ========================================================= */
+
+.sim-results {
+  margin-top: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sim-section {
+  margin-bottom: 14px;
+}
+
+.sim-section > .eyebrow {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.sim-card {
+  background: #0e1b26;
+  border: 1px solid #1b2c3b;
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.sim-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 10px;
+}
+
+.sim-row:last-child {
+  border-bottom: none;
+}
+
+.sim-row span {
+  color: #94a3b8;
+  font-size: 11px;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.sim-row strong {
+  font-size: 11px;
+  text-align: right;
+  word-break: break-word;
+}
+
+.sim-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 4px 0;
+}
+
+.sim-subtable {
+  margin-top: 10px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.sim-subtable-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #63778a;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sim-subtable table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+
+.sim-subtable th {
+  text-align: left;
+  padding: 5px 6px;
+  color: #63778a;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sim-subtable td {
+  padding: 5px 6px;
+  color: #c8d4e0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  word-break: break-all;
+}
+
+/* Column widths for 5-column tables (Top Bottlenecks) */
+.sim-subtable th:nth-child(1),
+.sim-subtable td:nth-child(1) {
+  width: 28%;
+}
+
+.sim-subtable th:nth-child(2),
+.sim-subtable td:nth-child(2) {
+  width: 14%;
+}
+
+.sim-subtable th:nth-child(3),
+.sim-subtable td:nth-child(3) {
+  width: 16%;
+  text-align: right;
+}
+
+.sim-subtable th:nth-child(4),
+.sim-subtable td:nth-child(4) {
+  width: 11%;
+  text-align: right;
+}
+
+.sim-subtable th:nth-child(5),
+.sim-subtable td:nth-child(5) {
+  width: 31%;
+  white-space: nowrap;
+}
+
+.sim-more {
+  display: block;
+  margin-top: 4px;
+  color: #53748d;
+  font-size: 9px;
+}
+
+.sim-disclaimer {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #1a1f0e;
+  border: 1px solid #3d4a1e;
+  border-radius: 6px;
+  color: #a3b87a;
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.sim-unavailable {
+  padding: 8px 10px;
+  background: #1a1410;
+  border: 1px solid #3d2e1e;
+  border-radius: 6px;
+  color: #b89a7a;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.sim-unavailable-reason {
+  display: block;
+  margin-top: 4px;
+  color: #8a7060;
+  font-size: 10px;
+}
+
+.sim-tech-toggle {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #1b2c3b;
+  border-radius: 6px;
+  background: #0e1b26;
+  color: #94a3b8;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.sim-tech-toggle:hover {
+  background: #132535;
+  color: #e2e8f0;
+}
+
+.sim-tech-json {
+  margin-top: 8px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px;
+  background: #071019;
+  border: 1px solid #1b2c3b;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #94a3b8;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* =========================================================
+   DISABLED SIDEBAR ITEMS
+   ========================================================= */
+
+.nav-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nav-disabled:hover {
+  background: transparent;
+  color: #94a3b8;
+}
+
+.nav-badge {
+  margin-left: auto;
+  padding: 1px 6px;
+  background: #1b2c3b;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* =========================================================
+   DISABLED LAYER TOGGLES
+   ========================================================= */
+
+.layer-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.layer-disabled:hover {
+  background: transparent;
+}
+
+.disabled-toggle {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.disabled-toggle span {
+  background: #334155;
+}
+
+/* =========================================================
+   OFFLINE STATUS
+   ========================================================= */
+
+.status-offline .status-dot,
+.dot-offline {
+  background: #ef4444 !important;
+  box-shadow: 0 0 6px #ef4444 !important;
+}
+
+.dot-loading {
+  background: #eab308 !important;
+  box-shadow: 0 0 6px #eab308 !important;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* =========================================================
+   SIMULATION LOADING INDICATOR
+   ========================================================= */
+
+.sim-loading {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #0e1b26;
+  border: 1px solid #1b2c3b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sim-loading span {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.sim-loading-bar {
+  width: 100%;
+  height: 3px;
+  background: #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.sim-loading-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+  border-radius: 3px;
+  animation: sim-loading-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes sim-loading-slide {
+  0% { left: -40%; }
+  100% { left: 100%; }
 }

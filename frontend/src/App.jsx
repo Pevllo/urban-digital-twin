@@ -1,5 +1,10 @@
 import CesiumMap from "./components/map/CesiumMap";
+import SimulationResults from "./components/simulation/SimulationResults";
 import { useEffect, useState } from "react";
+import spatialData from "./data/spatialFeatures.json";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
 import {
   BarChart3,
   Building2,
@@ -18,19 +23,19 @@ import {
 import "./App.css";
 
 const navigation = [
-  { label: "Dashboard", icon: Gauge },
+  { label: "Dashboard", icon: Gauge, disabled: true },
   { label: "Digital Twin", icon: Map, active: true },
-  { label: "Analytics", icon: BarChart3 },
+  { label: "Analytics", icon: BarChart3, disabled: true },
   { label: "What-If Simulator", icon: Layers3 },
-  { label: "Reports", icon: Cloud },
+  { label: "Reports", icon: Cloud, disabled: true },
 ];
 
 const tools = [
-  { label: "Buildings", icon: Building2 },
-  { label: "Roads", icon: Map },
-  { label: "Traffic", icon: Car },
-  { label: "Electricity", icon: Zap },
-  { label: "Environment", icon: Leaf },
+  { label: "Buildings", icon: Building2, key: "buildings" },
+  { label: "Roads", icon: Map, key: "roads" },
+  { label: "Traffic", icon: Car, disabled: true },
+  { label: "Electricity", icon: Zap, disabled: true },
+  { label: "Environment", icon: Leaf, disabled: true },
 ];
 
 function App() {
@@ -62,6 +67,30 @@ function App() {
     gross_floor_area_sqm: 0,
   });
 
+  const [simulationResult, setSimulationResult] = useState(null);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [simulationError, setSimulationError] = useState(null);
+
+  const [backendOnline, setBackendOnline] = useState(null);
+  const [layerVisibility, setLayerVisibility] = useState({
+    buildings: true,
+    roads: true,
+  });
+
+  // =========================================================
+  // BACKEND HEALTH CHECK
+  // =========================================================
+
+  useEffect(() => {
+    fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) })
+      .then((res) => {
+        setBackendOnline(res.ok);
+      })
+      .catch(() => {
+        setBackendOnline(false);
+      });
+  }, []);
+
   // =========================================================
   // LOAD TRAFFIC WHEN A ROAD IS SELECTED
   // =========================================================
@@ -90,7 +119,7 @@ function App() {
     let cancelled = false;
 
     fetch(
-      `http://127.0.0.1:8000/api/v1/traffic/baseline?osm_way_id=${osmWayId}`,
+      `${API_BASE}/api/v1/traffic/baseline?osm_way_id=${osmWayId}`,
     )
       .then((response) => {
         if (!response.ok) {
@@ -154,20 +183,20 @@ function App() {
       development_type: type,
 
       num_units:
-        type === "residential" || type === "mixed_use" ? current.num_units : 0,
+        type === "residential" || type === "residential_compound" || type === "mixed_use" ? current.num_units : 0,
 
       num_residents:
-        type === "residential" || type === "mixed_use"
+        type === "residential" || type === "residential_compound" || type === "mixed_use"
           ? current.num_residents
           : 0,
 
-      num_beds: type === "hospital" ? current.num_beds : 0,
+      num_beds: type === "hospital" || type === "hotel" ? current.num_beds : 0,
 
       staff_count:
-        type === "hospital" || type === "school" ? current.staff_count : 0,
+        type === "hospital" || type === "school" || type === "hotel" ? current.staff_count : 0,
 
       visitor_capacity:
-        type === "hospital" || type === "commercial" || type === "retail"
+        type === "hospital" || type === "commercial" || type === "retail" || type === "mall" || type === "hotel"
           ? current.visitor_capacity
           : 0,
 
@@ -177,12 +206,13 @@ function App() {
         type === "office" ||
         type === "commercial" ||
         type === "retail" ||
+        type === "mall" ||
         type === "mixed_use"
           ? current.num_employees
           : 0,
 
       gross_leasable_area_sqm:
-        type === "commercial" || type === "retail"
+        type === "commercial" || type === "retail" || type === "mall"
           ? current.gross_leasable_area_sqm
           : 0,
     }));
@@ -211,26 +241,28 @@ function App() {
     };
 
     // -------------------------------------------------------
-    // RESIDENTIAL
+    // RESIDENTIAL / RESIDENTIAL COMPOUND
     // -------------------------------------------------------
 
-    if (type === "residential") {
+    if (type === "residential" || type === "residential_compound") {
       properties.num_units = Number(developmentForm.num_units) || 0;
 
       properties.num_residents = Number(developmentForm.num_residents) || 0;
     }
 
     // -------------------------------------------------------
-    // HOSPITAL
+    // HOSPITAL / HOTEL
     // -------------------------------------------------------
 
-    if (type === "hospital") {
+    if (type === "hospital" || type === "hotel") {
       properties.num_beds = Number(developmentForm.num_beds) || 0;
 
       properties.staff_count = Number(developmentForm.staff_count) || 0;
 
-      properties.visitor_capacity =
-        Number(developmentForm.visitor_capacity) || 0;
+      if (type === "hospital" || type === "hotel") {
+        properties.visitor_capacity =
+          Number(developmentForm.visitor_capacity) || 0;
+      }
     }
 
     // -------------------------------------------------------
@@ -252,10 +284,10 @@ function App() {
     }
 
     // -------------------------------------------------------
-    // COMMERCIAL / RETAIL
+    // COMMERCIAL / RETAIL / MALL
     // -------------------------------------------------------
 
-    if (type === "commercial" || type === "retail") {
+    if (type === "commercial" || type === "retail" || type === "mall") {
       properties.visitor_capacity =
         Number(developmentForm.visitor_capacity) || 0;
 
@@ -286,8 +318,6 @@ function App() {
 
       development_type: type,
 
-      zone_id: "NAC",
-
       name: developmentForm.name || "New Development",
 
       latitude: developmentLocation.latitude,
@@ -309,7 +339,7 @@ function App() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/v1/developments",
+        `${API_BASE}/api/v1/developments`,
         {
           method: "POST",
 
@@ -342,6 +372,9 @@ function App() {
           createdDevelopment.floors ?? (Number(developmentForm.floors) || 1),
       });
 
+      setSimulationResult(null);
+      setSimulationError(null);
+
       alert("Development created successfully.");
     } catch (error) {
       console.error("Failed to create development:", error);
@@ -353,13 +386,95 @@ function App() {
   // DELETE CURRENT PROPOSED DEVELOPMENT
   // =========================================================
 
-  const handleDeleteDevelopment = () => {
+  const handleDeleteDevelopment = async () => {
+    if (!selectedDevelopment) {
+      return;
+    }
+
+    const devId = selectedDevelopment.development_id || selectedDevelopment.id;
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/v1/developments/${devId}`,
+        { method: "DELETE" },
+      );
+
+      if (!response.ok && response.status !== 404) {
+        const errorText = await response.text();
+        throw new Error(
+          `Delete API returned ${response.status}: ${errorText}`,
+        );
+      }
+    } catch (error) {
+      console.error("Failed to delete development on backend:", error);
+      alert(`Failed to delete development: ${error.message}`);
+      return;
+    }
+
     setSelectedDevelopment(null);
     setProposedDevelopment(null);
+    setDevelopmentLocation(null);
+    setSimulationResult(null);
+    setSimulationError(null);
 
-    console.log(
-      "Proposed development removed from map."
-    );  
+    console.log("Development deleted:", devId);
+  };
+
+  // =========================================================
+  // RUN SIMULATION
+  // =========================================================
+
+  const handleRunSimulation = async () => {
+    if (!selectedDevelopment) {
+      return;
+    }
+
+    setSimulationLoading(true);
+    setSimulationError(null);
+
+    const dev = selectedDevelopment;
+
+    const payload = {
+      development_id: dev.development_id || dev.id,
+      development_type: dev.development_type,
+      zone_id: dev.zone_id || "",
+      name: dev.name || "New Development",
+      properties: dev.properties || {},
+      simulation_hour: dev.simulation_hour ?? 8,
+      latitude: dev.latitude,
+      longitude: dev.longitude,
+    };
+
+    console.log("Running simulation:", payload);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/v1/scenarios/simulate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Simulation API returned ${response.status}: ${errorText}`,
+        );
+      }
+
+      const result = await response.json();
+      console.log("Simulation result:", result);
+      setSimulationResult(result);
+    } catch (error) {
+      console.error("Simulation failed:", error);
+      setSimulationError(
+        error.message || "Simulation failed. Please try again.",
+      );
+    } finally {
+      setSimulationLoading(false);
+    }
   };
 
   // =========================================================
@@ -398,13 +513,16 @@ function App() {
           <p className="section-label">Workspace</p>
 
           <nav className="nav-list">
-            {navigation.map(({ label, icon: Icon, active }) => (
+            {navigation.map(({ label, icon: Icon, active, disabled }) => (
               <button
                 key={label}
-                className={`nav-item ${active ? "active" : ""}`}
+                className={`nav-item ${active ? "active" : ""} ${disabled ? "nav-disabled" : ""}`}
+                disabled={disabled}
+                title={disabled ? "Coming Soon" : undefined}
               >
                 <Icon size={18} />
                 <span>{label}</span>
+                {disabled && <span className="nav-badge">Soon</span>}
               </button>
             ))}
           </nav>
@@ -414,16 +532,33 @@ function App() {
           <p className="section-label">City Layers</p>
 
           <div className="layer-list">
-            {tools.map(({ label, icon: Icon }) => (
-              <button className="layer-item" key={label}>
+            {tools.map(({ label, icon: Icon, key, disabled }) => (
+              <button
+                className={`layer-item ${disabled ? "layer-disabled" : ""}`}
+                key={label}
+                disabled={disabled}
+                title={disabled ? "Not implemented" : undefined}
+                onClick={key ? () => {
+                  setLayerVisibility((prev) => ({
+                    ...prev,
+                    [key]: !prev[key],
+                  }));
+                } : undefined}
+              >
                 <span className="layer-left">
                   <Icon size={17} />
                   {label}
                 </span>
 
-                <span className="toggle on">
-                  <span />
-                </span>
+                {key ? (
+                  <span className={`toggle ${layerVisibility[key] ? "on" : ""}`}>
+                    <span />
+                  </span>
+                ) : (
+                  <span className="toggle disabled-toggle">
+                    <span />
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -475,9 +610,13 @@ function App() {
           </div>
 
           <div className="topbar-actions">
-            <div className="status">
-              <span className="status-dot" />
-              System Operational
+            <div className={`status ${backendOnline === false ? "status-offline" : ""}`}>
+              <span className={`status-dot ${backendOnline === false ? "dot-offline" : ""} ${backendOnline === null ? "dot-loading" : ""}`} />
+              {backendOnline === null
+                ? "Checking..."
+                : backendOnline
+                  ? "System Operational"
+                  : "Backend Offline"}
             </div>
 
             <button className="icon-button">
@@ -508,10 +647,10 @@ function App() {
               <div>
                 <span>Total Buildings</span>
 
-                <strong>1,284</strong>
+                <strong>{(spatialData.metadata?.total_buildings ?? 0).toLocaleString()}</strong>
               </div>
 
-              <small>+3.2%</small>
+              <small>City model</small>
             </div>
 
             <div className="kpi-card">
@@ -522,10 +661,10 @@ function App() {
               <div>
                 <span>Traffic Level</span>
 
-                <strong>64%</strong>
+                <strong>—</strong>
               </div>
 
-              <small>Moderate</small>
+              <small>Not available</small>
             </div>
 
             <div className="kpi-card">
@@ -536,10 +675,10 @@ function App() {
               <div>
                 <span>Energy Demand</span>
 
-                <strong>18.4 MW</strong>
+                <strong>—</strong>
               </div>
 
-              <small>+5.8%</small>
+              <small>Not available</small>
             </div>
 
             <div className="kpi-card">
@@ -550,10 +689,10 @@ function App() {
               <div>
                 <span>CO₂ Emissions</span>
 
-                <strong>7.2 t/h</strong>
+                <strong>—</strong>
               </div>
 
-              <small>-2.1%</small>
+              <small>Not available</small>
             </div>
           </div>
 
@@ -609,6 +748,8 @@ function App() {
 
                     setSelectedRoad(null);
                     setRoadTraffic(null);
+
+                    setSelectedDevelopment(null);
                   }}
                   onDevelopmentSelect={(developmentId) => {
                     if (!proposedDevelopment) {
@@ -653,6 +794,8 @@ function App() {
                     setSelectedBuilding(null);
 
                     setRoadTraffic(null);
+
+                    setSelectedDevelopment(null);
                   }}
                   onMapLocationSelect={(location) => {
                     if (!developmentMode) {
@@ -670,6 +813,8 @@ function App() {
                   }}
                   developmentMode={developmentMode}
                   proposedDevelopment={proposedDevelopment}
+                  scenarioImpact={simulationResult?.stage4_impact_assessment}
+                  layerVisibility={layerVisibility}
                 />
 
                 <div className="map-badge">
@@ -780,12 +925,50 @@ function App() {
 
                   <button
                     className="secondary-button"
+                    onClick={handleRunSimulation}
+                    disabled={simulationLoading}
+                    style={{
+                      width: "100%",
+                      marginTop: "16px",
+                      ...(simulationLoading ? { opacity: 0.6, cursor: "not-allowed" } : {}),
+                    }}
+                  >
+                    {simulationLoading ? "Running Simulation..." : "Run Simulation"}
+                  </button>
+
+                  {simulationLoading && (
+                    <div className="sim-loading">
+                      <div className="sim-loading-bar" />
+                      <span>Trip demand → Traffic assignment → Impact assessment</span>
+                    </div>
+                  )}
+
+                  {simulationError && (
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        padding: "8px 12px",
+                        background: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        borderRadius: "6px",
+                        color: "#dc2626",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {simulationError}
+                    </div>
+                  )}
+
+                  <SimulationResults simulationResult={simulationResult} />
+
+                  <button
+                    className="secondary-button"
                     onClick={handleDeleteDevelopment}
                     style={{
                       background: "#ef4444",
                       borderColor: "#ef4444",
                       width: "100%",
-                      marginTop: "16px",
+                      marginTop: "8px",
                     }}
                   >
                     Delete Development
@@ -1075,11 +1258,17 @@ function App() {
                     >
                       <option value="residential">Residential</option>
 
+                      <option value="residential_compound">Residential Compound</option>
+
                       <option value="commercial">Commercial</option>
+
+                      <option value="retail">Retail</option>
+
+                      <option value="mall">Mall</option>
 
                       <option value="office">Office</option>
 
-                      <option value="retail">Retail</option>
+                      <option value="hotel">Hotel</option>
 
                       <option value="mixed_use">Mixed Use</option>
 
@@ -1121,10 +1310,11 @@ function App() {
                   </label>
 
                   {/* =================================================
-                      RESIDENTIAL
+                      RESIDENTIAL / RESIDENTIAL COMPOUND
                   ================================================= */}
 
-                  {developmentForm.development_type === "residential" && (
+                  {(developmentForm.development_type === "residential" ||
+                    developmentForm.development_type === "residential_compound") && (
                     <>
                       <label>
                         Number of Units
@@ -1159,10 +1349,11 @@ function App() {
                   )}
 
                   {/* =================================================
-                      HOSPITAL
+                      HOSPITAL / HOTEL
                   ================================================= */}
 
-                  {developmentForm.development_type === "hospital" && (
+                  {(developmentForm.development_type === "hospital" ||
+                    developmentForm.development_type === "hotel") && (
                     <>
                       <label>
                         Number of Beds
@@ -1271,11 +1462,12 @@ function App() {
                   )}
 
                   {/* =================================================
-                      COMMERCIAL / RETAIL
+                      COMMERCIAL / RETAIL / MALL
                   ================================================= */}
 
                   {(developmentForm.development_type === "commercial" ||
-                    developmentForm.development_type === "retail") && (
+                    developmentForm.development_type === "retail" ||
+                    developmentForm.development_type === "mall") && (
                     <>
                       <label>
                         Visitor Capacity

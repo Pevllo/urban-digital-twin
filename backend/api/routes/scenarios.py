@@ -1,6 +1,10 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, status
 from backend.api.schemas.development_schema import SimulationRequestSchema
 from backend.api.services.simulator_service import run_simulation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scenarios", tags=["Scenarios"])
 
@@ -36,5 +40,9 @@ def simulate_scenario(payload: SimulationRequestSchema):
         return result
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception:
+        logger.exception("Scenario simulation failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Simulation failed. Please check the scenario inputs and try again.",
+        )
