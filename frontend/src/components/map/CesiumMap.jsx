@@ -10,6 +10,8 @@ import {
   Color,
   ScreenSpaceEventType,
   createOsmBuildingsAsync,
+  Terrain,
+  HeightReference,
 } from "cesium";
 
 import "cesium/Build/Cesium/Widgets/widgets.css";
@@ -367,6 +369,8 @@ function CesiumMap({
         }),
       ),
 
+      terrain: Terrain.fromWorldTerrain(),
+
       baseLayerPicker: false,
       animation: false,
       timeline: false,
@@ -458,6 +462,8 @@ function CesiumMap({
             height: 0,
 
             extrudedHeight: height,
+
+            heightReference: HeightReference.CLAMP_TO_GROUND,
 
             material: Color.fromCssColorString("#64748b").withAlpha(0.85),
 
