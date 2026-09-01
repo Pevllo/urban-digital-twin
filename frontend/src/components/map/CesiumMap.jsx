@@ -10,7 +10,6 @@ import {
   Color,
   ScreenSpaceEventType,
   createOsmBuildingsAsync,
-  HeightReference,
 } from "cesium";
 
 import "cesium/Build/Cesium/Widgets/widgets.css";
@@ -494,9 +493,7 @@ function CesiumMap({
           "[CesiumMap] Skipping OSM Buildings load — no Ion token configured.",
         );
       } else {
-        createOsmBuildingsAsync({
-            heightReference: HeightReference.CLAMP_TO_GROUND,
-          })
+        createOsmBuildingsAsync()
           .then((tileset) => {
             if (viewer.isDestroyed()) {
               return;
