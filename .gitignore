@@ -26,6 +26,7 @@ Thumbs.db
 # === traffic-model exclusions ===
 models/traffic-model/data/processed/synthetic_traffic.csv
 models/traffic-model/data/processed/synthetic_traffic.gpkg
+models/traffic-model/data/processed/synthetic_traffic_baseline.csv
 *.gpkg.tmp
 
 # === trip-demand-model: large generated/regenerable files ===

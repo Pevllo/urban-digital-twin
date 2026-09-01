@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 import {
   Viewer,
+  Ion,
   OpenStreetMapImageryProvider,
   ImageryLayer,
   Cartesian3,
@@ -17,6 +18,27 @@ import "./CesiumMap.css";
 
 import spatialData from "../../data/spatialFeatures.json";
 
+// =========================================================
+// CESIUM ION AUTHENTICATION
+//
+// The token is read from VITE_CESIUM_ION_TOKEN in .env.
+// Without a valid token the OSM Buildings 3D Tiles will not
+// load, but the basemap and local spatialFeatures data will
+// continue to work normally.
+// =========================================================
+
+const CESIUM_ION_TOKEN = import.meta.env.VITE_CESIUM_ION_TOKEN || "";
+
+if (CESIUM_ION_TOKEN) {
+  Ion.defaultAccessToken = CESIUM_ION_TOKEN;
+} else {
+  console.warn(
+    "[CesiumMap] VITE_CESIUM_ION_TOKEN is not set. " +
+      "OSM Buildings 3D Tiles will not load. " +
+      "Add a valid token to frontend/.env to enable them.",
+  );
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 const MAX_AUTO_RETRIES = 3;
@@ -27,6 +49,7 @@ function CesiumMap({
   onRoadSelect,
   onMapLocationSelect,
   onDevelopmentSelect,
+  onTrafficDataLoaded,
   developmentMode,
   proposedDevelopment,
   scenarioImpact,
@@ -39,6 +62,7 @@ function CesiumMap({
   const roadSelectRef = useRef(onRoadSelect);
   const mapLocationSelectRef = useRef(onMapLocationSelect);
   const developmentSelectRef = useRef(onDevelopmentSelect);
+  const trafficDataLoadedRef = useRef(onTrafficDataLoaded);
 
   const [trafficData, setTrafficData] = useState({});
   const [trafficLoading, setTrafficLoading] = useState(true);
@@ -67,6 +91,8 @@ function CesiumMap({
     mapLocationSelectRef.current = onMapLocationSelect;
 
     developmentSelectRef.current = onDevelopmentSelect;
+
+    trafficDataLoadedRef.current = onTrafficDataLoaded;
 
     developmentModeRef.current = developmentMode;
 
@@ -138,6 +164,10 @@ function CesiumMap({
       setTrafficLoaded(true);
       setTrafficError(null);
       attemptsRef.current = 0;
+
+      if (trafficDataLoadedRef.current) {
+        trafficDataLoadedRef.current(lookup);
+      }
 
       console.log(`Loaded traffic data for ${count} OSM roads.`);
     } catch (error) {
@@ -390,123 +420,155 @@ function CesiumMap({
       });
 
     // =======================================================
-    // BUILDINGS
+    // BUILDINGS + ROADS
+    //
+    // Suspend entity collection events during bulk creation so
+    // that collectionChanged fires once at the end instead of
+    // 3,567 times (one per add).  This lets Cesium batch the
+    // scene update work.
     // =======================================================
 
-    spatialData.buildings.forEach((building) => {
-      const positions = [];
+    viewer.entities.suspendEvents();
 
-      building.coordinates.forEach(([lat, lon]) => {
-        positions.push(Cartesian3.fromDegrees(lon, lat));
+    try {
+      // =======================================================
+      // BUILDINGS
+      // =======================================================
+
+      spatialData.buildings.forEach((building) => {
+        const positions = [];
+
+        building.coordinates.forEach(([lat, lon]) => {
+          positions.push(Cartesian3.fromDegrees(lon, lat));
+        });
+
+        if (positions.length < 3) {
+          return;
+        }
+
+        const height = Math.max(8, Math.min(40, building.radius * 1.2));
+
+        viewer.entities.add({
+          id: building.id,
+
+          name: building.name || `Building ${building.id.replace("bldg_", "")}`,
+
+          polygon: {
+            hierarchy: positions,
+
+            height: 0,
+
+            extrudedHeight: height,
+
+            material: Color.fromCssColorString("#64748b").withAlpha(0.85),
+
+            outline: true,
+
+            outlineColor: Color.fromCssColorString("#cbd5e1"),
+          },
+
+          properties: {
+            type: "building",
+
+            buildingType: building.building,
+
+            name: building.name,
+
+            centroid: building.centroid,
+
+            radius: building.radius,
+          },
+        });
       });
 
-      if (positions.length < 3) {
-        return;
+      // =======================================================
+      // OSM BUILDINGS (3D Tiles)
+      //
+      // Requires a valid Cesium Ion access token. If the token
+      // is missing or the request fails, a warning is logged
+      // and the rest of the map continues to work.
+      // =======================================================
+
+      if (!CESIUM_ION_TOKEN) {
+        console.warn(
+          "[CesiumMap] Skipping OSM Buildings load — no Ion token configured.",
+        );
+      } else {
+        createOsmBuildingsAsync({
+            heightReference: HeightReference.CLAMP_TO_GROUND,
+          })
+          .then((tileset) => {
+            if (viewer.isDestroyed()) {
+              return;
+            }
+
+            osmBuildingsRef.current = tileset;
+            viewer.scene.primitives.add(tileset);
+
+            const vis = layerVisibilityRef.current;
+            if (vis && vis.buildings === false) {
+              tileset.show = false;
+            }
+
+            console.log("[CesiumMap] OSM Buildings 3D Tiles loaded successfully.");
+          })
+          .catch((error) => {
+            console.error("[CesiumMap] Failed to load OSM Buildings 3D Tiles:", error);
+          });
       }
 
-      const height = Math.max(8, Math.min(40, building.radius * 1.2));
+      // =======================================================
+      // ROADS
+      // =======================================================
 
-      viewer.entities.add({
-        id: building.id,
+      spatialData.roads.forEach((road) => {
+        const positions = [];
 
-        name: building.name || `Building ${building.id.replace("bldg_", "")}`,
+        road.coordinates.forEach(([lat, lon]) => {
+          positions.push(Cartesian3.fromDegrees(lon, lat, 2));
+        });
 
-        polygon: {
-          hierarchy: positions,
+        if (positions.length < 2) {
+          return;
+        }
 
-          height: 0,
+        const osmWayId = String(road.id.replace("way_", ""));
 
-          extrudedHeight: height,
+        const traffic = trafficData[osmWayId];
 
-          heightReference: HeightReference.CLAMP_TO_GROUND,
+        const initialColor = traffic
+          ? getTrafficColor(traffic.congestion_percent)
+          : getRoadColor(road.highway);
 
-          material: Color.fromCssColorString("#64748b").withAlpha(0.85),
+        viewer.entities.add({
+          id: road.id,
 
-          outline: true,
+          name: road.name || `Road ${road.id.replace("way_", "")}`,
 
-          outlineColor: Color.fromCssColorString("#cbd5e1"),
-        },
+          polyline: {
+            positions,
 
-        properties: {
-          type: "building",
+            width: getRoadWidth(road.highway),
 
-          buildingType: building.building,
+            material: initialColor,
 
-          name: building.name,
+            clampToGround: true,
+          },
 
-          centroid: building.centroid,
+          properties: {
+            type: "road",
 
-          radius: building.radius,
-        },
+            highway: road.highway,
+
+            name: road.name,
+
+            osmWayId: osmWayId,
+          },
+        });
       });
-    });
-
-    // =======================================================
-    // OSM BUILDINGS (3D Tiles)
-    // =======================================================
-
-    createOsmBuildingsAsync().then((tileset) => {
-      if (viewer.isDestroyed()) {
-        return;
-      }
-      tileset.heightReference = HeightReference.CLAMP_TO_GROUND;
-      osmBuildingsRef.current = tileset;
-      viewer.scene.primitives.add(tileset);
-      const vis = layerVisibilityRef.current;
-      if (vis && vis.buildings === false) {
-        tileset.show = false;
-      }
-    });
-
-    // =======================================================
-    // ROADS
-    // =======================================================
-
-    spatialData.roads.forEach((road) => {
-      const positions = [];
-
-      road.coordinates.forEach(([lat, lon]) => {
-        positions.push(Cartesian3.fromDegrees(lon, lat, 2));
-      });
-
-      if (positions.length < 2) {
-        return;
-      }
-
-      const osmWayId = String(road.id.replace("way_", ""));
-
-      const traffic = trafficData[osmWayId];
-
-      const initialColor = traffic
-        ? getTrafficColor(traffic.congestion_percent)
-        : getRoadColor(road.highway);
-
-      viewer.entities.add({
-        id: road.id,
-
-        name: road.name || `Road ${road.id.replace("way_", "")}`,
-
-        polyline: {
-          positions,
-
-          width: getRoadWidth(road.highway),
-
-          material: initialColor,
-
-          clampToGround: true,
-        },
-
-        properties: {
-          type: "road",
-
-          highway: road.highway,
-
-          name: road.name,
-
-          osmWayId: osmWayId,
-        },
-      });
-    });
+    } finally {
+      viewer.entities.resumeEvents();
+    }
 
     // =======================================================
     // MAP SELECTION

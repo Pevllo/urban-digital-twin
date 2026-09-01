@@ -42,6 +42,7 @@ function App() {
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [selectedRoad, setSelectedRoad] = useState(null);
   const [roadTraffic, setRoadTraffic] = useState(null);
+  const [bulkTrafficData, setBulkTrafficData] = useState({});
 
   const [developmentMode, setDevelopmentMode] = useState(false);
   const [developmentLocation, setDevelopmentLocation] = useState(null);
@@ -92,7 +93,10 @@ function App() {
   }, []);
 
   // =========================================================
-  // LOAD TRAFFIC WHEN A ROAD IS SELECTED
+  // LOOKUP TRAFFIC WHEN A ROAD IS SELECTED
+  //
+  // Uses the already-loaded bulk traffic data from CesiumMap
+  // instead of making a redundant single-road API request.
   // =========================================================
 
   useEffect(() => {
@@ -116,37 +120,13 @@ function App() {
       return;
     }
 
-    let cancelled = false;
-
-    fetch(
-      `${API_BASE}/api/v1/traffic/baseline?osm_way_id=${osmWayId}`,
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(
-            `Traffic API returned ${response.status} for OSM way ${osmWayId}`,
-          );
-        }
-
-        return response.json();
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setRoadTraffic(data);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn("Traffic data unavailable:", error.message);
-
-          setRoadTraffic(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedRoad]);
+    // Look up from the already-loaded bulk traffic data,
+    // or fall back to the traffic data passed with the road selection.
+    const traffic = bulkTrafficData[osmWayId]
+      || selectedRoad.traffic
+      || null;
+    setRoadTraffic(traffic);
+  }, [selectedRoad, bulkTrafficData]);
 
   // =========================================================
   // DEVELOPMENT MODE
@@ -793,8 +773,6 @@ function App() {
 
                     setSelectedBuilding(null);
 
-                    setRoadTraffic(null);
-
                     setSelectedDevelopment(null);
                   }}
                   onMapLocationSelect={(location) => {
@@ -811,6 +789,7 @@ function App() {
 
                     console.log("Development location selected:", location);
                   }}
+                  onTrafficDataLoaded={(data) => setBulkTrafficData(data)}
                   developmentMode={developmentMode}
                   proposedDevelopment={proposedDevelopment}
                   scenarioImpact={simulationResult?.stage4_impact_assessment}
