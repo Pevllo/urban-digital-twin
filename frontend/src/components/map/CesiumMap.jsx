@@ -465,6 +465,8 @@ function CesiumMap({
 
             heightReference: HeightReference.CLAMP_TO_GROUND,
 
+            extrudedHeightReference: HeightReference.RELATIVE_TO_GROUND,
+
             material: Color.fromCssColorString("#64748b").withAlpha(0.85),
 
             outline: true,
@@ -847,6 +849,8 @@ function CesiumMap({
       name: proposedDevelopment.name || "Proposed Development",
 
       position: Cartesian3.fromDegrees(longitude, latitude, height / 2),
+
+      heightReference: HeightReference.RELATIVE_TO_GROUND,
 
       box: {
         dimensions: new Cartesian3(footprintWidth, footprintDepth, height),
