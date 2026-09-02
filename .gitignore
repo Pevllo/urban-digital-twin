@@ -56,3 +56,17 @@ trip-demand-model/data/raw/trip_production_300k.csv
 
 # Backup directory — local only
 trip-demand-model/files 5/
+
+# === water-demand-model: large artifacts & data ===
+models/water-demand-model/data/
+models/water-demand-model/models/*.joblib
+models/water-demand-model/models/*.pkl
+models/water-demand-model/models/*.h5
+
+# === solid-waste-model: large artifacts & data ===
+models/solid-waste-model/data/
+models/solid-waste-model/models/*.joblib
+models/solid-waste-model/models/*.pkl
+
+# === backend data ===
+backend/data/developments.db

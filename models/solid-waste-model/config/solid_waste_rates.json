@@ -1,0 +1,92 @@
+{
+  "_meta": {
+    "description": "Base solid waste generation rates used for derived dataset.",
+    "sources": [
+      "World Bank What a Waste 2.0 / 3.0 (Egypt/MENA urban kg/capita/day)",
+      "Published land-use specific generation factors (residential, commercial, healthcare, institutional)"
+    ],
+    "note": "All observations are DERIVED; not direct weighbridge or collection records of named facilities."
+  },
+  "rates": {
+    "residential_compound": {
+      "driver": "num_residents",
+      "base_kg_per_capita_day": 0.85,
+      "alt_driver": "num_units",
+      "alt_kg_per_unit_day": 2.2,
+      "min_kg": 0.4,
+      "max_kg": 1.6,
+      "composition": {
+        "organic": 0.55,
+        "paper_cardboard": 0.12,
+        "plastic": 0.12,
+        "glass": 0.04,
+        "metal": 0.03,
+        "other": 0.14
+      }
+    },
+    "hospital": {
+      "driver": "num_beds",
+      "base_kg_per_capita_day": 2.5,
+      "alt_driver": "staff_count",
+      "alt_kg_per_unit_day": 0.6,
+      "min_kg": 1.0,
+      "max_kg": 5.0,
+      "composition": {
+        "organic": 0.25,
+        "paper_cardboard": 0.15,
+        "plastic": 0.2,
+        "glass": 0.05,
+        "metal": 0.05,
+        "other": 0.3
+      }
+    },
+    "mall": {
+      "driver": "gross_leasable_area_sqm",
+      "base_kg_per_capita_day": 0.025,
+      "alt_driver": "visitor_capacity",
+      "alt_kg_per_unit_day": 0.08,
+      "min_kg": 0.008,
+      "max_kg": 0.06,
+      "composition": {
+        "organic": 0.35,
+        "paper_cardboard": 0.25,
+        "plastic": 0.2,
+        "glass": 0.05,
+        "metal": 0.03,
+        "other": 0.12
+      }
+    },
+    "school": {
+      "driver": "num_students",
+      "base_kg_per_capita_day": 0.25,
+      "alt_driver": "staff_count",
+      "alt_kg_per_unit_day": 0.4,
+      "min_kg": 0.1,
+      "max_kg": 0.6,
+      "composition": {
+        "organic": 0.4,
+        "paper_cardboard": 0.3,
+        "plastic": 0.12,
+        "glass": 0.03,
+        "metal": 0.02,
+        "other": 0.13
+      }
+    },
+    "office": {
+      "driver": "num_employees",
+      "base_kg_per_capita_day": 0.45,
+      "alt_driver": "gross_floor_area_sqm",
+      "alt_kg_per_unit_day": 0.015,
+      "min_kg": 0.15,
+      "max_kg": 1.0,
+      "composition": {
+        "organic": 0.2,
+        "paper_cardboard": 0.4,
+        "plastic": 0.15,
+        "glass": 0.05,
+        "metal": 0.05,
+        "other": 0.15
+      }
+    }
+  }
+}

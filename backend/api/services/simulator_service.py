@@ -15,6 +15,14 @@ for d in [MODELS_DIR / "traffic-model" / "src", MODELS_DIR / "trip-demand-model"
 from trip_generation import DevelopmentInput
 from simulator import simulate_what_if_scenario
 from backend.api.services.electricity_service import run_electricity_prediction
+from backend.api.services.water_service import (
+    run_water_prediction,
+    ModelUnavailableError as WaterUnavailableError,
+)
+from backend.api.services.waste_service import (
+    run_waste_prediction,
+    ModelUnavailableError as WasteUnavailableError,
+)
 
 
 # ============================================================================
@@ -168,6 +176,62 @@ def _split_mixed_use(properties: dict) -> dict[str, dict]:
 
 
 # ============================================================================
+# WATER / WASTE MIXED-USE DECOMPOSITION
+# ============================================================================
+#
+# The Water and Waste models only support the 5 canonical development types
+# (residential_compound, hospital, mall, school, office).  They cannot
+# directly predict a "mixed_use" composite.
+#
+# Following the same convention used by the electricity pipeline, a
+# mixed_use development is decomposed into component types with fixed
+# area/activity ratios, each component is predicted independently, and the
+# results are summed to represent the complete development.  This avoids
+# double counting and produces a single aggregate for the whole building.
+#
+# Decomposition ratios mirror electricity_service.DEFAULT_MIXED_USE_SPLIT:
+#   40 % office, 30 % residential_compound, 30 % mall
+# ============================================================================
+
+WATER_WASTE_MIXED_USE_SPLIT = {
+    "office": 0.40,
+    "residential_compound": 0.30,
+    "mall": 0.30,
+}
+
+
+def _decompose_mixed_use_properties(properties: dict) -> dict[str, dict]:
+    """Split a mixed-use property dict into per-component property dicts.
+
+    Activity drivers are allocated across the components by ratio.  Each
+    component receives a subset of the shared drivers so that the final
+    summed water/waste value represents the complete development.
+    """
+    return {
+        "office": {
+            "num_employees": properties.get("num_employees", 0),
+            "gross_leasable_area_sqm": (
+                properties.get("gross_leasable_area_sqm", 0) * WATER_WASTE_MIXED_USE_SPLIT["office"]
+            ),
+        },
+        "residential_compound": {
+            "num_residents": properties.get("num_residents", 0),
+            "num_units": properties.get("num_units", 0),
+            "gross_leasable_area_sqm": (
+                properties.get("gross_leasable_area_sqm", 0) * WATER_WASTE_MIXED_USE_SPLIT["residential_compound"]
+            ),
+        },
+        "mall": {
+            "num_employees": properties.get("num_employees", 0),
+            "gross_leasable_area_sqm": (
+                properties.get("gross_leasable_area_sqm", 0) * WATER_WASTE_MIXED_USE_SPLIT["mall"]
+            ),
+            "visitor_capacity": properties.get("visitor_capacity", 0),
+        },
+    }
+
+
+# ============================================================================
 # PUBLIC API
 # ============================================================================
 
@@ -243,7 +307,281 @@ def run_simulation(
     traffic_result["stage5_electricity"] = electricity_result
     traffic_result["development_input"]["development_type"] = dev_type
 
+    # ------------------------------------------------------------------
+    # 6. Water demand prediction
+    # ------------------------------------------------------------------
+    traffic_result["stage6_water"] = _run_water_stage(
+        canonical_type=canonical_type,
+        props=properties,
+        zone_id=zone_id,
+        latitude=latitude,
+        longitude=longitude,
+        hour=hour,
+    )
+
+    # ------------------------------------------------------------------
+    # 7. Solid waste generation prediction
+    # ------------------------------------------------------------------
+    traffic_result["stage7_waste"] = _run_waste_stage(
+        canonical_type=canonical_type,
+        props=properties,
+        zone_id=zone_id,
+        latitude=latitude,
+        longitude=longitude,
+        hour=hour,
+    )
+
+    # ------------------------------------------------------------------
+    # 8. Environmental / CO2 impact
+    # ------------------------------------------------------------------
+    traffic_result["stage8_environment"] = _run_co2_stage(
+        traffic_result=traffic_result,
+        electricity_result=electricity_result,
+        waste_result=traffic_result.get("stage7_waste", {}),
+    )
+
     return traffic_result
+
+
+def _resolve_zone_coords(
+    zone_id: str,
+    latitude: float | None,
+    longitude: float | None,
+) -> tuple[float | None, float | None]:
+    """Return zone centroid coordinates for the water/waste models.
+
+    When lat/lon are supplied directly they are used; otherwise we look up
+    the zone centroid from the authoritative zone dataset.
+    """
+    if latitude is not None and longitude is not None:
+        return latitude, longitude
+    try:
+        zone_df = _load_zone_df()
+        row = zone_df[zone_df["zone_id"] == zone_id]
+        if not row.empty:
+            return float(row.iloc[0]["centroid_lat"]), float(row.iloc[0]["centroid_lon"])
+    except (FileNotFoundError, KeyError, ValueError):
+        pass
+    return None, None
+
+
+def _run_water_stage(
+    canonical_type: str,
+    props: dict,
+    zone_id: str,
+    latitude: float | None,
+    longitude: float | None,
+    hour: int,
+) -> dict:
+    """Run the water demand prediction stage (single type or mixed-use)."""
+    if canonical_type == "mixed_use":
+        return _run_mixed_use_water(props, zone_id, hour)
+
+    try:
+        result = run_water_prediction(
+            dev_type=canonical_type,
+            zone_id=zone_id,
+            properties=props,
+            simulation_hour=hour,
+        )
+        return {
+            "water_available": True,
+            "water_demand_m3_hour": result["prediction"],
+            "water_demand_liters_hour": result["prediction_liters"],
+            "unit": result["unit"],
+            "model": result["model"],
+        }
+    except (ValueError, WaterUnavailableError) as exc:
+        return {
+            "water_available": False,
+            "reason": str(exc),
+        }
+
+
+def _run_mixed_use_water(props: dict, zone_id: str, hour: int) -> dict:
+    components = []
+    for comp_type, comp_props in _decompose_mixed_use_properties(props).items():
+        try:
+            out = run_water_prediction(
+                dev_type=comp_type,
+                zone_id=zone_id,
+                properties=comp_props,
+                simulation_hour=hour,
+            )
+            components.append({
+                "component": comp_type,
+                "water_demand_m3_hour": out["prediction"],
+                "water_demand_liters_hour": out["prediction_liters"],
+            })
+        except (ValueError, WaterUnavailableError) as exc:
+            components.append({
+                "component": comp_type,
+                "water_demand_m3_hour": None,
+                "reason": str(exc),
+            })
+
+    valid = [c for c in components if c.get("water_demand_m3_hour") is not None]
+    if not valid:
+        return {
+            "water_available": False,
+            "reason": "No mixed-use water component could be predicted.",
+            "components": components,
+        }
+    total_m3 = sum(c["water_demand_m3_hour"] for c in valid)
+    return {
+        "water_available": True,
+        "water_demand_m3_hour": round(total_m3, 4),
+        "water_demand_liters_hour": round(total_m3 * 1000, 2),
+        "unit": "m3",
+        "mixed_use": True,
+        "decomposition": WATER_WASTE_MIXED_USE_SPLIT,
+        "components": components,
+    }
+
+
+def _run_waste_stage(
+    canonical_type: str,
+    props: dict,
+    zone_id: str,
+    latitude: float | None,
+    longitude: float | None,
+    hour: int,
+) -> dict:
+    """Run the solid waste generation prediction stage."""
+    zone_lat, zone_lon = _resolve_zone_coords(zone_id, latitude, longitude)
+
+    if canonical_type == "mixed_use":
+        return _run_mixed_use_waste(props, zone_lat, zone_lon)
+
+    try:
+        result = run_waste_prediction(
+            dev_type=canonical_type,
+            properties=props,
+            zone_lat=zone_lat,
+            zone_lon=zone_lon,
+        )
+        return {
+            "waste_available": True,
+            "waste_generation_kg_day": result["waste_generation_kg"],
+            "waste_generation_tonnes_day": result["waste_generation_tonnes"],
+            "model": result["model"],
+        }
+    except (ValueError, WasteUnavailableError) as exc:
+        return {
+            "waste_available": False,
+            "reason": str(exc),
+        }
+
+
+def _run_mixed_use_waste(props: dict, zone_lat: float | None, zone_lon: float | None) -> dict:
+    components = []
+    for comp_type, comp_props in _decompose_mixed_use_properties(props).items():
+        try:
+            out = run_waste_prediction(
+                dev_type=comp_type,
+                properties=comp_props,
+                zone_lat=zone_lat,
+                zone_lon=zone_lon,
+            )
+            components.append({
+                "component": comp_type,
+                "waste_generation_kg_day": out["waste_generation_kg"],
+            })
+        except (ValueError, WasteUnavailableError) as exc:
+            components.append({
+                "component": comp_type,
+                "waste_generation_kg_day": None,
+                "reason": str(exc),
+            })
+
+    valid = [c for c in components if c.get("waste_generation_kg_day") is not None]
+    if not valid:
+        return {
+            "waste_available": False,
+            "reason": "No mixed-use waste component could be predicted.",
+            "components": components,
+        }
+    total_kg = sum(c["waste_generation_kg_day"] for c in valid)
+    return {
+        "waste_available": True,
+        "waste_generation_kg_day": round(total_kg, 2),
+        "waste_generation_tonnes_day": round(total_kg / 1000, 5),
+        "mixed_use": True,
+        "decomposition": WATER_WASTE_MIXED_USE_SPLIT,
+        "components": components,
+    }
+
+
+def _run_co2_stage(
+    traffic_result: dict,
+    electricity_result: dict,
+    waste_result: dict,
+) -> dict:
+    """Compute an indicative CO2 / environmental impact estimate.
+
+    This is a transparent, documented calculation using published emission
+    factors — NOT a separate ML model.
+
+    Emission factors (source: UK BEIS / IPCC 2019 default grid + UK DEFRA
+    conversion factors, widely used as proxy for Egypt's mixed fossil grid):
+      - Grid electricity ~0.5 kg CO2e / kWh
+      - Private road transport ~0.18 kg CO2e / vehicle-km
+      - Waste treatment (mixed residual, landfill-default) ~0.5 t CO2e / t waste
+
+    These are indicative proxy factors.  They are documented here so the
+    calculation is reproducible and auditable; where the true factor for
+    the Egyptian grid is required it should replace the default grid value.
+    """
+    factors = {
+        "electricity_kg_co2_per_kwh": 0.5,
+        "road_transport_kg_co2_per_vkm": 0.18,
+        "waste_kg_co2_per_kg": 0.0005,
+        "sources": (
+            "Electricity: IPCC 2019 / BEIS grid-average default (proxy for "
+            "Egypt's mixed fossil grid). Road transport: UK DEFRA vehicle-Km "
+            "factor. Waste: IPCC landfill residual-default factor."
+        ),
+    }
+
+    electricity_available = electricity_result.get("electricity_available", False)
+    electricity_kwh = electricity_result.get(
+        "electricity_kwh",
+        electricity_result.get("total_floor_area_sqm", 0.0) * 0.0,
+    )
+    if not electricity_available or not electricity_kwh:
+        electricity_available = False
+        electricity_kwh = 0.0
+
+    co2_electricity_kg = electricity_kwh * factors["electricity_kg_co2_per_kwh"]
+
+    waste_available = waste_result.get("waste_available", False)
+    waste_kg = waste_result.get("waste_generation_kg_day", 0.0)
+    if not waste_available:
+        waste_kg = 0.0
+    co2_waste_kg = waste_kg * factors["waste_kg_co2_per_kg"]
+
+    daily_trips = (
+        traffic_result.get("stage1_od_demand", {})
+        .get("daily_total_trips", 0.0)
+    )
+    avg_trip_km = 12.0  # assumed average trip length within the study area (km)
+    co2_transport_kg = daily_trips * avg_trip_km * factors["road_transport_kg_co2_per_vkm"]
+
+    total_co2_kg = co2_electricity_kg + co2_waste_kg + co2_transport_kg
+
+    return {
+        "co2_available": True,
+        "co2_electricity_kg": round(co2_electricity_kg, 2),
+        "co2_waste_kg": round(co2_waste_kg, 2),
+        "co2_transport_kg": round(co2_transport_kg, 2),
+        "total_co2_kg": round(total_co2_kg, 2),
+        "total_co2_tonnes": round(total_co2_kg / 1000, 4),
+        "method": (
+            "Transparent emissions calculation using published emission "
+            "factors (not an ML model). See factors below."
+        ),
+        "factors": factors,
+    }
 
 
 def _simulate_mixed_use_traffic(
