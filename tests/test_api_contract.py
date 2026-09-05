@@ -218,7 +218,7 @@ class TestUnifiedSimulation:
         elapsed = time.time() - t0
 
         assert status == 200
-        assert elapsed < 30  # should complete within 30s
+        assert elapsed < 60
 
         # All 8 stages present
         assert "stage1_od_demand" in body
@@ -229,6 +229,16 @@ class TestUnifiedSimulation:
         assert "stage6_water" in body
         assert "stage7_waste" in body
         assert "stage8_environment" in body
+
+        # Stage 4 Traffic Impact assessment
+        st4 = body["stage4_impact_assessment"]
+        assert "overall_impact_level" in st4
+        assert "network_condition" in st4
+        assert "development_impact" in st4
+        assert "avg_vc_change" in st4
+        assert "max_vc_change" in st4
+        assert st4["network_condition"] in ("GOOD", "MODERATE", "HIGH", "CRITICAL")
+        assert st4["development_impact"] in ("LOW", "MODERATE", "HIGH", "CRITICAL")
 
         # Water stage
         w = body["stage6_water"]

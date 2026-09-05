@@ -195,7 +195,7 @@ def test_12_internal_trips_handling():
 
 def test_13_scenario_level_summary():
     """Test 13 — Scenario-level summary metrics are computed correctly."""
-    rec1 = RoadImpactRecord("r1", 8, 1000.0, 300.0, 1300.0, 1200.0, 0.8333, 1.0833, 300.0, 30.0) # V/C > 1.0
+    rec1 = RoadImpactRecord("r1", 8, 1000.0, 300.0, 1300.0, 1200.0, 0.8333, 1.0833, 300.0, 30.0) # V/C > 1.0, delta 0.25
     rec2 = RoadImpactRecord("r2", 8, 500.0, 50.0, 550.0, 1000.0, 0.50, 0.55, 50.0, 10.0) # LOW
 
     scen_res = ScenarioTrafficResult(8, "residential_compound", "Z8", 350.0, 350.0, 0.0, [rec1, rec2])
@@ -203,6 +203,104 @@ def test_13_scenario_level_summary():
 
     assert result.number_of_affected_roads == 2
     assert result.roads_reaching_vc_1_or_more_count == 1
+    assert result.network_condition == "CRITICAL"
+    assert result.development_impact == "CRITICAL"  # max_vc_change >= 0.25
     assert result.overall_impact_level == "CRITICAL"
     assert result.max_delta_traffic_veh_h == pytest.approx(300.0)
+    assert result.avg_vc_change == pytest.approx(0.15, abs=1e-2)
+    assert result.max_vc_change == pytest.approx(0.25, abs=1e-2)
     assert result.prototype_disclaimer != ""
+
+
+def test_14_case1_no_worsening_with_critical_bottleneck():
+    """Test 14 (Case 1) — Network contains V/C 1.17 bottleneck, but development adds 0 delta to it."""
+    rec1 = RoadImpactRecord("r_bottleneck", 8, 1170.0, 0.0, 1170.0, 1000.0, 1.17, 1.17, 0.0, 0.0)
+    rec2 = RoadImpactRecord("r_normal", 8, 450.0, 0.0, 450.0, 1000.0, 0.45, 0.45, 0.0, 0.0)
+
+    scen_res = ScenarioTrafficResult(8, "residential_compound", "Z1", 26.2, 26.2, 0.0, [rec1, rec2])
+    result = assess_traffic_impact(scen_res)
+
+    assert result.roads_worsened_count == 0
+    assert result.avg_vc_change == pytest.approx(0.0)
+    assert result.max_vc_change == pytest.approx(0.0)
+    assert result.network_condition == "CRITICAL"  # Because scenario has V/C >= 1.00
+    assert result.development_impact == "LOW"      # Because delta = 0 and 0 worsened roads
+    assert result.overall_impact_level == "LOW"
+
+
+def test_15_case2_small_worsening():
+    """Test 15 (Case 2) — Small worsening below thresholds remains LOW."""
+    rec = RoadImpactRecord("r1", 8, 450.0, 10.0, 460.0, 1000.0, 0.45, 0.46, 10.0, 2.22)
+    scen_res = ScenarioTrafficResult(8, "office", "Z1", 10.0, 10.0, 0.0, [rec])
+    result = assess_traffic_impact(scen_res)
+
+    assert result.roads_worsened_count == 0
+    assert result.avg_vc_change == pytest.approx(0.01)
+    assert result.development_impact == "LOW"
+    assert result.network_condition == "GOOD"
+
+
+def test_16_case3_significant_worsening():
+    """Test 16 (Case 3) — Multiple worsened roads trigger HIGH development impact."""
+    # 6 roads worsening from LOS A (0.50) to LOS B (0.60)
+    recs = [
+        RoadImpactRecord(f"r_{i}", 8, 500.0, 100.0, 600.0, 1000.0, 0.50, 0.60, 100.0, 20.0)
+        for i in range(6)
+    ]
+    scen_res = ScenarioTrafficResult(8, "mall", "Z1", 600.0, 600.0, 0.0, recs)
+    result = assess_traffic_impact(scen_res)
+
+    assert result.roads_worsened_count == 6
+    assert result.development_impact == "HIGH"  # >= 5 worsened roads
+    assert result.overall_impact_level == "HIGH"
+
+
+def test_17_case4_preexisting_critical_bottleneck_zero_delta():
+    """Test 17 (Case 4) — Existing bottleneck V/C 1.17 unchanged -> Network CRITICAL, Impact LOW."""
+    rec = RoadImpactRecord("r_critical", 8, 1170.0, 0.0, 1170.0, 1000.0, 1.17, 1.17, 0.0, 0.0)
+    scen_res = ScenarioTrafficResult(8, "school", "Z1", 50.0, 50.0, 0.0, [rec])
+    result = assess_traffic_impact(scen_res)
+
+    assert result.network_condition == "CRITICAL"
+    assert result.development_impact == "LOW"
+    assert result.overall_impact_level == "LOW"
+
+
+def test_18_case5_development_worsens_already_critical_road():
+    """Test 18 (Case 5) — Development worsens an already critical road (1.05 -> 1.15)."""
+    rec = RoadImpactRecord("r_crit_worse", 8, 1050.0, 100.0, 1150.0, 1000.0, 1.05, 1.15, 100.0, 9.52)
+    scen_res = ScenarioTrafficResult(8, "residential_compound", "Z1", 100.0, 100.0, 0.0, [rec])
+    result = assess_traffic_impact(scen_res)
+
+    assert result.network_condition == "CRITICAL"
+    assert result.development_impact == "HIGH"  # 1 congested road worsened by >= 0.05
+    assert result.overall_impact_level == "HIGH"
+
+
+def test_19_empty_road_set():
+    """Test 19 — Edge case: Empty road set handled safely."""
+    scen_res = ScenarioTrafficResult(8, "office", "Z1", 0.0, 0.0, 0.0, [])
+    result = assess_traffic_impact(scen_res)
+
+    assert result.number_of_affected_roads == 0
+    assert result.network_condition == "GOOD"
+    assert result.development_impact == "LOW"
+    assert result.overall_impact_level == "LOW"
+    assert result.avg_vc_change == 0.0
+    assert result.max_vc_change == 0.0
+
+
+def test_20_newly_congested_road():
+    """Test 20 — Road transitions from LOS D (0.85) to LOS F (1.05) in a 5-road network."""
+    rec_crit = RoadImpactRecord("r_new_crit", 8, 850.0, 200.0, 1050.0, 1000.0, 0.85, 1.05, 200.0, 23.53)
+    rec_other = [
+        RoadImpactRecord(f"r_bg_{i}", 8, 400.0, 10.0, 410.0, 1000.0, 0.40, 0.41, 10.0, 2.5)
+        for i in range(4)
+    ]
+    scen_res = ScenarioTrafficResult(8, "mall", "Z1", 240.0, 240.0, 0.0, [rec_crit] + rec_other)
+    result = assess_traffic_impact(scen_res)
+
+    assert result.network_condition == "CRITICAL"
+    assert result.roads_worsened_count == 1
+    assert result.development_impact == "HIGH"  # Max delta 0.20, 1 congested road worsened, avg delta < 0.15
+

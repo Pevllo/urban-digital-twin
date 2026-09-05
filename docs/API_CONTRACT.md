@@ -286,7 +286,25 @@ The core endpoint. One development → full urban impact simulation.
 
   "stage3_scenario_traffic": { "..." : "Scenario traffic volumes" },
 
-  "stage4_impact_assessment": { "..." : "Traffic impact metrics" },
+  "stage4_impact_assessment": {
+    "total_development_trips": 28.0,
+    "assigned_external_trips": 28.0,
+    "unassigned_internal_trips": 0.0,
+    "number_of_affected_roads": 963,
+    "roads_worsened_count": 0,
+    "roads_reaching_los_E_or_F_count": 5,
+    "roads_reaching_vc_1_or_more_count": 5,
+    "baseline_average_vc": 0.4485,
+    "average_scenario_vc": 0.4489,
+    "avg_vc_change": 0.0004,
+    "max_vc_change": 0.0202,
+    "overall_impact_level": "LOW",
+    "development_impact": "LOW",
+    "network_condition": "CRITICAL",
+    "top_bottlenecks": [
+      {"road_id": "osm_543021784_2", "scenario_vc": 1.1958, "baseline_vc": 1.1756, "is_los_worsened": false}
+    ]
+  },
 
   "stage5_electricity": {
     "electricity_available": true,

@@ -70,3 +70,5 @@ models/solid-waste-model/models/*.pkl
 
 # === backend data ===
 backend/data/developments.db
+data/developments.db
+*.db

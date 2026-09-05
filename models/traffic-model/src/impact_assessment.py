@@ -66,6 +66,26 @@ def load_impact_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
             "weight_los_deterioration": 0.30,
             "max_reference_delta_veh_h": 500.0,
         },
+        "network_condition_rules": {
+            "critical_vc": 1.00,
+            "high_vc": 0.90,
+            "moderate_vc": 0.80,
+        },
+        "development_impact_rules": {
+            "critical_worsened_road_count": 15,
+            "critical_avg_vc_change": 0.15,
+            "critical_max_vc_change": 0.30,
+            "critical_congested_worsened_count": 3,
+            "high_worsened_road_count": 5,
+            "high_avg_vc_change": 0.05,
+            "high_max_vc_change": 0.15,
+            "high_congested_worsened_count": 1,
+            "moderate_worsened_road_count": 1,
+            "moderate_avg_vc_change": 0.02,
+            "moderate_max_vc_change": 0.05,
+            "congested_road_vc_threshold": 0.90,
+            "congested_road_min_delta_vc": 0.05,
+        },
         "overall_impact_rules": {
             "critical_vc": 1.00,
             "high_vc": 0.90,
@@ -208,6 +228,10 @@ class ImpactAssessmentResult:
     average_scenario_vc: float
     baseline_average_vc: float
     overall_impact_level: str
+    network_condition: str = "GOOD"
+    development_impact: str = "LOW"
+    avg_vc_change: float = 0.0
+    max_vc_change: float = 0.0
     road_assessments: List[RoadImpactAssessment] = field(default_factory=list)
     top_bottlenecks: List[RoadImpactAssessment] = field(default_factory=list)
     prototype_disclaimer: str = ""
@@ -230,6 +254,10 @@ class ImpactAssessmentResult:
             "average_scenario_vc": self.average_scenario_vc,
             "baseline_average_vc": self.baseline_average_vc,
             "overall_impact_level": self.overall_impact_level,
+            "network_condition": self.network_condition,
+            "development_impact": self.development_impact,
+            "avg_vc_change": self.avg_vc_change,
+            "max_vc_change": self.max_vc_change,
             "top_bottlenecks": [b.to_dict() for b in self.top_bottlenecks],
             "road_assessments": [r.to_dict() for r in self.road_assessments],
             "prototype_disclaimer": self.prototype_disclaimer,
@@ -245,7 +273,8 @@ def assess_traffic_impact(
     Main Stage 4 entry point.
 
     Consumes Stage 3B ScenarioTrafficResult, evaluates road-level V/C and LOS impacts,
-    identifies bottlenecks, and produces a scenario-level impact assessment summary.
+    identifies bottlenecks, and produces a scenario-level impact assessment summary
+    separating absolute Network Condition from marginal Development Impact.
     """
     cfg = load_impact_config(config_path)
 
@@ -315,27 +344,86 @@ def assess_traffic_impact(
     deltas = [a.delta_traffic_veh_h for a in assessments]
     scen_vcs = [a.scenario_vc for a in assessments]
     base_vcs = [a.baseline_vc for a in assessments]
+    vc_changes = [a.vc_change for a in assessments]
 
     max_delta = max(deltas) if deltas else 0.0
     avg_delta = sum(deltas) / max(n_affected, 1) if deltas else 0.0
     max_scen_vc = max(scen_vcs) if scen_vcs else 0.0
     avg_scen_vc = sum(scen_vcs) / max(n_affected, 1) if scen_vcs else 0.0
     avg_base_vc = sum(base_vcs) / max(n_affected, 1) if base_vcs else 0.0
+    avg_vc_change = round(avg_scen_vc - avg_base_vc, 4)
+    max_vc_change = max(vc_changes) if vc_changes else 0.0
 
-    # Overall scenario impact level
-    rules = cfg.get("overall_impact_rules", {})
-    crit_vc_rule = rules.get("critical_vc", 1.00)
-    high_vc_rule = rules.get("high_vc", 0.90)
-    high_worsened_rule = rules.get("high_worsened_road_count", 5)
+    # -------------------------------------------------------------------------
+    # 1. NETWORK CONDITION (Absolute Scenario Network Congestion)
+    # -------------------------------------------------------------------------
+    net_rules = cfg.get("network_condition_rules", {})
+    net_crit_vc = net_rules.get("critical_vc", 1.00)
+    net_high_vc = net_rules.get("high_vc", 0.90)
+    net_mod_vc = net_rules.get("moderate_vc", 0.80)
 
-    if vc_1_plus_count > 0 or max_scen_vc >= crit_vc_rule:
-        overall_impact = "CRITICAL"
-    elif max_scen_vc >= high_vc_rule or worsened_count >= high_worsened_rule:
-        overall_impact = "HIGH"
-    elif worsened_count > 0 or los_ef_count > 0:
-        overall_impact = "MODERATE"
+    if vc_1_plus_count > 0 or max_scen_vc >= net_crit_vc:
+        network_condition = "CRITICAL"
+    elif max_scen_vc >= net_high_vc or los_ef_count > 0:
+        network_condition = "HIGH"
+    elif max_scen_vc >= net_mod_vc:
+        network_condition = "MODERATE"
     else:
-        overall_impact = "LOW"
+        network_condition = "GOOD"
+
+    # -------------------------------------------------------------------------
+    # 2. DEVELOPMENT IMPACT (Baseline vs Scenario Deterioration)
+    # -------------------------------------------------------------------------
+    dev_rules = cfg.get("development_impact_rules", cfg.get("overall_impact_rules", {}))
+    crit_worsened = dev_rules.get("critical_worsened_road_count", 15)
+    crit_avg_vc_chg = dev_rules.get("critical_avg_vc_change", 0.10)
+    crit_max_vc_chg = dev_rules.get("critical_max_vc_change", 0.25)
+    crit_congested_worsened = dev_rules.get("critical_congested_worsened_count", 3)
+
+    high_worsened = dev_rules.get("high_worsened_road_count", 5)
+    high_avg_vc_chg = dev_rules.get("high_avg_vc_change", 0.05)
+    high_max_vc_chg = dev_rules.get("high_max_vc_change", 0.15)
+    high_congested_worsened = dev_rules.get("high_congested_worsened_count", 1)
+
+    mod_worsened = dev_rules.get("moderate_worsened_road_count", 1)
+    mod_avg_vc_chg = dev_rules.get("moderate_avg_vc_change", 0.02)
+    mod_max_vc_chg = dev_rules.get("moderate_max_vc_change", 0.05)
+
+    congested_vc_th = dev_rules.get("congested_road_vc_threshold", 0.90)
+    congested_min_delta = dev_rules.get("congested_road_min_delta_vc", 0.05)
+
+    # Count roads that were already congested (baseline V/C >= 0.90 or scenario V/C >= 1.00) AND worsened
+    congested_worsened_count = sum(
+        1 for a in assessments
+        if (a.baseline_vc >= congested_vc_th or a.scenario_vc >= 1.00)
+        and (a.is_los_worsened or a.vc_change >= congested_min_delta)
+    )
+
+    if (
+        congested_worsened_count >= crit_congested_worsened
+        or worsened_count >= crit_worsened
+        or avg_vc_change >= crit_avg_vc_chg
+        or max_vc_change >= crit_max_vc_chg
+    ):
+        development_impact = "CRITICAL"
+    elif (
+        congested_worsened_count >= high_congested_worsened
+        or worsened_count >= high_worsened
+        or avg_vc_change >= high_avg_vc_chg
+        or max_vc_change >= high_max_vc_chg
+    ):
+        development_impact = "HIGH"
+    elif (
+        worsened_count >= mod_worsened
+        or avg_vc_change >= mod_avg_vc_chg
+        or max_vc_change >= mod_max_vc_chg
+    ):
+        development_impact = "MODERATE"
+    else:
+        development_impact = "LOW"
+
+    # Backward compatibility: overall_impact_level reflects the development impact level
+    overall_impact = development_impact
 
     return ImpactAssessmentResult(
         development_type=scenario_result.development_type,
@@ -354,6 +442,10 @@ def assess_traffic_impact(
         average_scenario_vc=round(avg_scen_vc, 4),
         baseline_average_vc=round(avg_base_vc, 4),
         overall_impact_level=overall_impact,
+        network_condition=network_condition,
+        development_impact=development_impact,
+        avg_vc_change=avg_vc_change,
+        max_vc_change=max_vc_change,
         road_assessments=assessments,
         top_bottlenecks=bottlenecks,
         prototype_disclaimer=cfg.get("prototype_disclaimer", ""),
