@@ -113,6 +113,11 @@ export function BuildingReportsList({ reports, onBack, devName, currentDev }) {
                   <span className="rh-network-badge">
                     Network: {network}
                   </span>
+                  {(st4.roads_reaching_vc_1_or_more_count > 0) && (
+                    <span className="rh-critical-roads-badge">
+                      {st4.roads_reaching_vc_1_or_more_count} Critical
+                    </span>
+                  )}
                 </div>
 
                 <div className="rh-metrics-grid">

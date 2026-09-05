@@ -165,13 +165,14 @@ export function DevelopmentPanel() {
       const updated = await editDevelopment(targetDevId, payload);
       dispatch({ type: "DEVELOPMENT_UPDATED", dev: updated });
       dispatch({ type: "DEVELOPMENTS_RELOAD" });
-      setSavingEdit(false);
     } catch (err) {
-      setSavingEdit(false);
+      console.error("Failed to update development:", err);
       dispatch({
         type: "DEVELOPMENT_PLACE_ERROR",
         error: err instanceof ApiError ? err.message : "Failed to update development.",
       });
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -427,8 +428,13 @@ export function DevelopmentPanel() {
                           Impact: {latestReport.result.stage4_impact_assessment.overall_impact_level || latestReport.result.stage4_impact_assessment.development_impact || "HEALTHY"}
                         </span>
                         <span className="rh-network-badge">
-                          Network: {latestReport.result.stage4_impact_assessment.network_condition || "MODERATE"}
+                          Network: {latestReport.result.stage4_impact_assessment.network_condition || "GOOD"}
                         </span>
+                        {(latestReport.result.stage4_impact_assessment.roads_reaching_vc_1_or_more_count > 0) && (
+                          <span className="rh-critical-roads-badge">
+                            {latestReport.result.stage4_impact_assessment.roads_reaching_vc_1_or_more_count} Critical
+                          </span>
+                        )}
                       </div>
                     )}
 

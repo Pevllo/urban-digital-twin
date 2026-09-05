@@ -78,6 +78,50 @@ class TestDevelopmentCRUD:
         assert status == 200
         assert body["development_id"] == self.TEST_ID
 
+    def test_update_development(self):
+        status, body = api("PUT", f"/api/v1/developments/{self.TEST_ID}", json={
+            "development_id": self.TEST_ID,
+            "development_type": "residential_compound",
+            "name": "Updated British Compound",
+            "latitude": 30.01836,
+            "longitude": 31.75767,
+            "floors": 9,
+            "properties": {
+                "num_residents": 20000,
+                "num_units": 5000,
+                "gross_floor_area_sqm": 9000,
+            },
+        })
+        assert status == 200
+        assert body["development_id"] == self.TEST_ID
+        assert body["name"] == "Updated British Compound"
+        assert body["floors"] == 9
+        assert body["properties"]["num_residents"] == 20000
+        assert body["properties"]["num_units"] == 5000
+        assert body["properties"]["gross_floor_area_sqm"] == 9000
+
+        # Verify persistence via GET
+        get_status, get_body = api("GET", f"/api/v1/developments/{self.TEST_ID}")
+        assert get_status == 200
+        assert get_body["name"] == "Updated British Compound"
+        assert get_body["floors"] == 9
+
+    def test_update_not_found_returns_404(self):
+        status, body = api("PUT", "/api/v1/developments/non-existent-id-999", json={
+            "development_type": "residential_compound",
+            "latitude": 30.0,
+            "longitude": 31.0,
+        })
+        assert status == 404
+
+    def test_update_invalid_type_returns_422(self):
+        status, body = api("PUT", f"/api/v1/developments/{self.TEST_ID}", json={
+            "development_type": "invalid_type_xyz",
+            "latitude": 30.0,
+            "longitude": 31.0,
+        })
+        assert status == 422
+
     def test_delete_development(self):
         status, body = api("DELETE", f"/api/v1/developments/{self.TEST_ID}")
         assert status == 200
@@ -237,7 +281,7 @@ class TestUnifiedSimulation:
         assert "development_impact" in st4
         assert "avg_vc_change" in st4
         assert "max_vc_change" in st4
-        assert st4["network_condition"] in ("GOOD", "MODERATE", "HIGH", "CRITICAL")
+        assert st4["network_condition"] in ("GOOD", "NORMAL", "MODERATE", "CONGESTED", "HIGH", "CRITICAL")
         assert st4["development_impact"] in ("LOW", "MODERATE", "HIGH", "CRITICAL")
 
         # Water stage

@@ -1,4 +1,4 @@
-import { Car } from "lucide-react";
+import { Car, AlertTriangle } from "lucide-react";
 import { formatNumber } from "../../utils/format.js";
 import { classifyScenarioRoadImpact, extractOsmWayId } from "../../utils/trafficColors.js";
 
@@ -21,6 +21,7 @@ export function TrafficImpactCard({ stage1, stage3, stage4 }) {
   const netCondition = stage4?.network_condition;
   const affectedRoads = stage4?.number_of_affected_roads;
   const worsened = stage4?.roads_worsened_count;
+  const criticalRoadsCount = stage4?.roads_reaching_vc_1_or_more_count ?? 0;
   const baselineVc = stage4?.baseline_average_vc;
   const scenarioVc = stage4?.average_scenario_vc;
   const avgVcChange = stage4?.avg_vc_change !== undefined
@@ -58,6 +59,15 @@ export function TrafficImpactCard({ stage1, stage3, stage4 }) {
               </div>
             )}
           </div>
+
+          {criticalRoadsCount > 0 && (
+            <div className="localized-critical-banner">
+              <AlertTriangle size={12} />
+              <span>
+                {criticalRoadsCount} Localized Critical {criticalRoadsCount === 1 ? "Road" : "Roads"} (V/C ≥ 1.0)
+              </span>
+            </div>
+          )}
 
           <div className="traffic-rows">
             {trips !== undefined && (

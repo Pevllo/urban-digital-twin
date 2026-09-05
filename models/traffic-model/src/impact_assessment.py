@@ -68,8 +68,9 @@ def load_impact_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
         },
         "network_condition_rules": {
             "critical_vc": 1.00,
-            "high_vc": 0.90,
-            "moderate_vc": 0.80,
+            "congested_vc": 0.85,
+            "high_vc": 0.85,
+            "moderate_vc": 0.70,
         },
         "development_impact_rules": {
             "critical_worsened_road_count": 15,
@@ -139,30 +140,61 @@ def calculate_los_change(base_los: str, scen_los: str) -> Tuple[int, bool]:
     return drop_levels, worsened
 
 
-def classify_impact_severity(scen_vc: float, los_drop: int, scen_los: str, cfg: Optional[Dict[str, Any]] = None) -> str:
+def classify_impact_severity(
+    scen_vc: float,
+    los_drop: int,
+    scen_los: str,
+    base_los: Optional[str] = None,
+    vc_change: Optional[float] = None,
+    cfg: Optional[Dict[str, Any]] = None,
+) -> str:
     """
-    Classifies road impact severity: CRITICAL, HIGH, MODERATE, or LOW.
-    Deterministic prototype decision rules:
-      CRITICAL: V/C >= 1.00 OR LOS becomes F
-      HIGH: V/C >= 0.90 OR LOS worsens by >= 2 levels
-      MODERATE: V/C >= 0.80 OR LOS worsens by >= 1 level
-      LOW: otherwise
+    Classifies road impact severity: CRITICAL, HIGH, WORSENED, or LOW.
+
+    Decision rules considering BOTH Level-of-Service transition and capacity status:
+      1. CRITICAL:
+         - Scenario V/C >= 1.00 OR Scenario LOS == "F"
+         - Pre-existing F -> F remains CRITICAL because it is already critically congested.
+         - E -> F or any transition into F is CRITICAL.
+
+      2. HIGH:
+         - Significant LOS deterioration into heavy congestion that does not meet Critical criteria:
+           * los_drop >= 2 (e.g. A -> C, B -> D, C -> E)
+           * OR Scenario LOS == "E" (or scen_vc >= high_vc) with material worsening (los_drop >= 1 or vc_change >= 0.05)
+         - NOTE: Roads that remain in free-flow (e.g. A -> A or B -> B) are NEVER High Impact regardless of delta V/C.
+
+      3. WORSENED:
+         - V/C increases materially without severe congestion, or minor LOS deterioration (1 level):
+           * los_drop == 1 (e.g. A -> B, B -> C, C -> D)
+           * OR los_drop == 0 AND (vc_change is not None and vc_change >= worsened_min_delta) (e.g. A -> A with +0.19, +0.22, C -> C with +0.05)
+
+      4. LOW:
+         - Small delta V/C (vc_change < 0.05 or None) and no LOS deterioration (los_drop == 0) and scen_vc < 0.80.
     """
     rules = (cfg or {}).get("impact_severity_rules", {})
     crit_vc = rules.get("critical_vc_threshold", 1.00)
     high_vc = rules.get("high_vc_threshold", 0.90)
     high_drop = rules.get("high_los_drop", 2)
-    mod_vc = rules.get("moderate_vc_threshold", 0.80)
-    mod_drop = rules.get("moderate_los_drop", 1)
+    worsened_min_delta = rules.get("worsened_min_delta_vc", 0.05)
 
+    # 1. Critical Impact
     if scen_vc >= crit_vc or scen_los == "F":
         return "CRITICAL"
-    elif scen_vc >= high_vc or los_drop >= high_drop:
+
+    # 2. High Impact: requires significant LOS drop (>= 2 levels) or reaching LOS E with worsening
+    if los_drop >= high_drop:
         return "HIGH"
-    elif scen_vc >= mod_vc or los_drop >= mod_drop:
-        return "MODERATE"
-    else:
-        return "LOW"
+    if (scen_los == "E" or scen_vc >= high_vc) and (los_drop >= 1 or (vc_change is not None and vc_change >= worsened_min_delta)):
+        return "HIGH"
+
+    # 3. Worsened: minor LOS drop (1 level) OR material V/C increase (>= 0.05) on unchanged LOS
+    if los_drop >= 1:
+        return "WORSENED"
+    if vc_change is not None and vc_change >= worsened_min_delta:
+        return "WORSENED"
+
+    # 4. Low / No Significant Impact
+    return "LOW"
 
 
 def compute_bottleneck_score(scen_vc: float, delta_traffic: float, los_drop: int, cfg: Optional[Dict[str, Any]] = None) -> float:
@@ -306,7 +338,14 @@ def assess_traffic_impact(
         scen_los = classify_los(vc_scen, cfg)
 
         los_drop, worsened = calculate_los_change(base_los, scen_los)
-        severity = classify_impact_severity(vc_scen, los_drop, scen_los, cfg)
+        severity = classify_impact_severity(
+            scen_vc=vc_scen,
+            los_drop=los_drop,
+            scen_los=scen_los,
+            base_los=base_los,
+            vc_change=vc_change,
+            cfg=cfg,
+        )
         b_score = compute_bottleneck_score(vc_scen, delta_v, los_drop, cfg)
 
         assessment = RoadImpactAssessment(
@@ -357,16 +396,19 @@ def assess_traffic_impact(
     # -------------------------------------------------------------------------
     # 1. NETWORK CONDITION (Absolute Scenario Network Congestion)
     # -------------------------------------------------------------------------
+    # Network condition reflects overall network-wide congestion based on the
+    # scenario average V/C, cleanly distinguished from localized bottlenecks.
+    # -------------------------------------------------------------------------
     net_rules = cfg.get("network_condition_rules", {})
     net_crit_vc = net_rules.get("critical_vc", 1.00)
-    net_high_vc = net_rules.get("high_vc", 0.90)
-    net_mod_vc = net_rules.get("moderate_vc", 0.80)
+    net_congested_vc = net_rules.get("congested_vc", net_rules.get("high_vc", 0.85))
+    net_mod_vc = net_rules.get("moderate_vc", 0.70)
 
-    if vc_1_plus_count > 0 or max_scen_vc >= net_crit_vc:
+    if avg_scen_vc >= net_crit_vc:
         network_condition = "CRITICAL"
-    elif max_scen_vc >= net_high_vc or los_ef_count > 0:
-        network_condition = "HIGH"
-    elif max_scen_vc >= net_mod_vc:
+    elif avg_scen_vc >= net_congested_vc:
+        network_condition = "CONGESTED"
+    elif avg_scen_vc >= net_mod_vc:
         network_condition = "MODERATE"
     else:
         network_condition = "GOOD"

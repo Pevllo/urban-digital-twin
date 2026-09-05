@@ -222,6 +222,119 @@ console.log("---------------------------------------------------------");
   console.log("✓ TEST 10: Simulation response extraction from stage4_impact_assessment.road_assessments passed");
 }
 
+// =========================================================
+// TEST 11: Multi-Criteria Severity Matrix (A->A +0.19/+0.22 is Worsened, NOT High Impact)
+// =========================================================
+{
+  // A -> A with +0.19 (0.33 -> 0.52)
+  const res1 = classifyScenarioRoadImpact({
+    road_id: "osm_1",
+    baseline_vc: 0.33,
+    scenario_vc: 0.52,
+    vc_change: 0.19,
+    baseline_los: "A",
+    scenario_los: "A",
+    los_change_levels: 0,
+    is_los_worsened: false,
+    impact_severity: "WORSENED",
+  });
+  assert.equal(res1.status, "WORSENED");
+  assert.equal(res1.label, "Worsened");
+
+  // A -> A with +0.22 (0.31 -> 0.53)
+  const res2 = classifyScenarioRoadImpact({
+    road_id: "osm_2",
+    baseline_vc: 0.31,
+    scenario_vc: 0.53,
+    vc_change: 0.22,
+    baseline_los: "A",
+    scenario_los: "A",
+    los_change_levels: 0,
+    is_los_worsened: false,
+    impact_severity: "WORSENED",
+  });
+  assert.equal(res2.status, "WORSENED");
+  assert.equal(res2.label, "Worsened");
+
+  // E -> F with +0.01 (0.99 -> 1.00)
+  const res3 = classifyScenarioRoadImpact({
+    road_id: "osm_3",
+    baseline_vc: 0.99,
+    scenario_vc: 1.00,
+    vc_change: 0.01,
+    baseline_los: "E",
+    scenario_los: "F",
+    los_change_levels: 1,
+    is_los_worsened: true,
+    impact_severity: "CRITICAL",
+  });
+  assert.equal(res3.status, "CRITICAL");
+  assert.equal(res3.label, "Critical Impact");
+
+  // C -> D with +0.03 (0.78 -> 0.81)
+  const res4 = classifyScenarioRoadImpact({
+    road_id: "osm_4",
+    baseline_vc: 0.78,
+    scenario_vc: 0.81,
+    vc_change: 0.03,
+    baseline_los: "C",
+    scenario_los: "D",
+    los_change_levels: 1,
+    is_los_worsened: true,
+    impact_severity: "WORSENED",
+  });
+  assert.equal(res4.status, "WORSENED");
+  assert.equal(res4.label, "Worsened");
+
+  // F -> F with +0.00 (1.10 -> 1.10)
+  const res5 = classifyScenarioRoadImpact({
+    road_id: "osm_5",
+    baseline_vc: 1.10,
+    scenario_vc: 1.10,
+    vc_change: 0.00,
+    baseline_los: "F",
+    scenario_los: "F",
+    los_change_levels: 0,
+    is_los_worsened: false,
+    impact_severity: "CRITICAL",
+  });
+  assert.equal(res5.status, "CRITICAL");
+  assert.equal(res5.label, "Critical Impact");
+
+  // F -> F with +0.01 (1.05 -> 1.06)
+  const res6 = classifyScenarioRoadImpact({
+    road_id: "osm_6",
+    baseline_vc: 1.05,
+    scenario_vc: 1.06,
+    vc_change: 0.01,
+    baseline_los: "F",
+    scenario_los: "F",
+    los_change_levels: 0,
+    is_los_worsened: false,
+    impact_severity: "CRITICAL",
+  });
+  assert.equal(res6.status, "CRITICAL");
+  assert.equal(res6.label, "Critical Impact");
+
+  // D -> E with +0.06 (0.86 -> 0.92)
+  const res7 = classifyScenarioRoadImpact({
+    road_id: "osm_7",
+    baseline_vc: 0.86,
+    scenario_vc: 0.92,
+    vc_change: 0.06,
+    baseline_los: "D",
+    scenario_los: "E",
+    los_change_levels: 1,
+    is_los_worsened: true,
+    impact_severity: "HIGH",
+  });
+  assert.equal(res7.status, "HIGH_IMPACT");
+  assert.equal(res7.label, "High Impact");
+
+  console.log("✓ TEST 11: Multi-criteria severity matrix (A->A +0.19/+0.22 -> Worsened, E->F -> Critical, F->F -> Critical, D->E -> High) passed");
+}
+
 console.log("---------------------------------------------------------");
-console.log("ALL 10 WHAT-IF TRAFFIC MAPPING TESTS PASSED!");
+console.log("ALL 11 WHAT-IF TRAFFIC MAPPING TESTS PASSED!");
 console.log("---------------------------------------------------------");
+

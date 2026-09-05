@@ -101,10 +101,10 @@ def test_5_no_deterioration():
 def test_6_impact_severity():
     """Test 6 — Impact severity classification."""
     assert classify_impact_severity(1.05, 1, "F") == "CRITICAL"
-    assert classify_impact_severity(0.95, 0, "E") == "HIGH"
-    assert classify_impact_severity(0.75, 2, "D") == "HIGH"
-    assert classify_impact_severity(0.85, 0, "D") == "MODERATE"
-    assert classify_impact_severity(0.50, 0, "A") == "LOW"
+    assert classify_impact_severity(0.95, 1, "E", vc_change=0.05) == "HIGH"
+    assert classify_impact_severity(0.75, 2, "D", vc_change=0.15) == "HIGH"
+    assert classify_impact_severity(0.85, 1, "D", vc_change=0.03) == "WORSENED"
+    assert classify_impact_severity(0.50, 0, "A", vc_change=0.00) == "LOW"
 
 
 def test_7_zero_baseline_traffic():
@@ -203,7 +203,7 @@ def test_13_scenario_level_summary():
 
     assert result.number_of_affected_roads == 2
     assert result.roads_reaching_vc_1_or_more_count == 1
-    assert result.network_condition == "CRITICAL"
+    assert result.network_condition == "MODERATE"  # Average V/C = 0.81665 (between 0.70 and 0.85)
     assert result.development_impact == "CRITICAL"  # max_vc_change >= 0.25
     assert result.overall_impact_level == "CRITICAL"
     assert result.max_delta_traffic_veh_h == pytest.approx(300.0)
@@ -223,7 +223,8 @@ def test_14_case1_no_worsening_with_critical_bottleneck():
     assert result.roads_worsened_count == 0
     assert result.avg_vc_change == pytest.approx(0.0)
     assert result.max_vc_change == pytest.approx(0.0)
-    assert result.network_condition == "CRITICAL"  # Because scenario has V/C >= 1.00
+    assert result.roads_reaching_vc_1_or_more_count == 1
+    assert result.network_condition == "MODERATE"  # Average V/C = 0.81 (distinguished from localized critical road)
     assert result.development_impact == "LOW"      # Because delta = 0 and 0 worsened roads
     assert result.overall_impact_level == "LOW"
 
@@ -300,7 +301,121 @@ def test_20_newly_congested_road():
     scen_res = ScenarioTrafficResult(8, "mall", "Z1", 240.0, 240.0, 0.0, [rec_crit] + rec_other)
     result = assess_traffic_impact(scen_res)
 
-    assert result.network_condition == "CRITICAL"
+    # Average V/C is ~0.538 (GOOD network) with 1 localized critical road and HIGH development impact
+    assert result.network_condition == "GOOD"
+    assert result.roads_reaching_vc_1_or_more_count == 1
     assert result.roads_worsened_count == 1
-    assert result.development_impact == "HIGH"  # Max delta 0.20, 1 congested road worsened, avg delta < 0.15
+    assert result.development_impact == "HIGH"
+
+
+def test_21_scenarios_a_b_c_d_network_condition_classification():
+    """Test 21 — Explicitly verify Scenarios A, B, C, D for network condition vs localized critical roads."""
+    # Scenario A: Average V/C = 0.44, 11 roads >= 1.0, 1 development-worsened congested road (HIGH impact)
+    # 1 road worsened into critical (0.85 -> 1.05, delta 0.20)
+    # 10 roads pre-existing critical (1.05 -> 1.05, delta 0.00)
+    # 89 normal roads (~0.36 -> ~0.37)
+    crit_worsened = [RoadImpactRecord("r_worse", 8, 850.0, 200.0, 1050.0, 1000.0, 0.85, 1.05, 200.0, 23.53)]
+    crit_existing = [
+        RoadImpactRecord(f"r_exist_{i}", 8, 1050.0, 0.0, 1050.0, 1000.0, 1.05, 1.05, 0.0, 0.0)
+        for i in range(10)
+    ]
+    norm_recs = [
+        RoadImpactRecord(f"r_norm_{i}", 8, 360.0, 4.0, 364.0, 1000.0, 0.36, 0.364, 4.0, 1.11)
+        for i in range(89)
+    ]
+    scen_a = ScenarioTrafficResult(8, "residential_compound", "Z1", 560.0, 560.0, 0.0, crit_worsened + crit_existing + norm_recs)
+    res_a = assess_traffic_impact(scen_a)
+    assert res_a.average_scenario_vc == pytest.approx(0.44, abs=0.01)
+    assert res_a.roads_reaching_vc_1_or_more_count == 11
+    assert res_a.network_condition in ("GOOD", "NORMAL")
+    assert res_a.development_impact == "HIGH"
+
+    # Scenario B: Average V/C = 0.85 -> Network = CONGESTED
+    recs_b = [
+        RoadImpactRecord(f"r_b_{i}", 8, 800.0, 50.0, 850.0, 1000.0, 0.80, 0.85, 50.0, 6.25)
+        for i in range(10)
+    ]
+    scen_b = ScenarioTrafficResult(8, "commercial", "Z1", 500.0, 500.0, 0.0, recs_b)
+    res_b = assess_traffic_impact(scen_b)
+    assert res_b.average_scenario_vc == pytest.approx(0.85, abs=0.01)
+    assert res_b.network_condition == "CONGESTED"
+
+    # Scenario C: Average V/C >= 1.00 -> Network = CRITICAL
+    recs_c = [
+        RoadImpactRecord(f"r_c_{i}", 8, 950.0, 100.0, 1050.0, 1000.0, 0.95, 1.05, 100.0, 10.53)
+        for i in range(10)
+    ]
+    scen_c = ScenarioTrafficResult(8, "mixed_use", "Z1", 1000.0, 1000.0, 0.0, recs_c)
+    res_c = assess_traffic_impact(scen_c)
+    assert res_c.average_scenario_vc >= 1.00
+    assert res_c.network_condition == "CRITICAL"
+
+    # Scenario D: Average V/C = 0.40, No roads >= 1.0 -> Network = GOOD
+    recs_d = [
+        RoadImpactRecord(f"r_d_{i}", 8, 380.0, 20.0, 400.0, 1000.0, 0.38, 0.40, 20.0, 5.26)
+        for i in range(10)
+    ]
+    scen_d = ScenarioTrafficResult(8, "school", "Z1", 200.0, 200.0, 0.0, recs_d)
+    res_d = assess_traffic_impact(scen_d)
+    assert res_d.average_scenario_vc == pytest.approx(0.40, abs=0.01)
+    assert res_d.roads_reaching_vc_1_or_more_count == 0
+    assert res_d.network_condition in ("GOOD", "NORMAL")
+
+
+def test_22_road_impact_severity_comprehensive_matrix():
+    """
+    Test 22 — Comprehensive regression matrix for road-level Impact Severity:
+    - A -> A with large delta V/C (+0.19, +0.22) => WORSENED (NOT High Impact)
+    - A -> B => WORSENED
+    - B -> C => WORSENED
+    - C -> D => WORSENED
+    - D -> E => HIGH
+    - C -> E => HIGH
+    - E -> F => CRITICAL
+    - F -> F => CRITICAL
+    - V/C crossing 1.0 => CRITICAL
+    - No-change roads (+0.00) => LOW
+    """
+    # 1. A -> A with large Delta V/C (+0.19 and +0.22) -> WORSENED, NOT High Impact
+    # Road 1: 0.33 -> 0.52 (A -> A, +0.19)
+    assert classify_impact_severity(scen_vc=0.52, los_drop=0, scen_los="A", base_los="A", vc_change=0.19) == "WORSENED"
+    # Road 2: 0.31 -> 0.53 (A -> A, +0.22)
+    assert classify_impact_severity(scen_vc=0.53, los_drop=0, scen_los="A", base_los="A", vc_change=0.22) == "WORSENED"
+    # Road 3: 0.40 -> 0.51 (A -> A, +0.11)
+    assert classify_impact_severity(scen_vc=0.51, los_drop=0, scen_los="A", base_los="A", vc_change=0.11) == "WORSENED"
+
+    # 2. A -> B (0.55 -> 0.63, +0.08) -> WORSENED (1 level drop)
+    assert classify_impact_severity(scen_vc=0.63, los_drop=1, scen_los="B", base_los="A", vc_change=0.08) == "WORSENED"
+
+    # 3. B -> C (0.68 -> 0.74, +0.06) -> WORSENED (1 level drop)
+    assert classify_impact_severity(scen_vc=0.74, los_drop=1, scen_los="C", base_los="B", vc_change=0.06) == "WORSENED"
+
+    # 4. C -> D (0.78 -> 0.81, +0.03) -> WORSENED (1 level drop)
+    assert classify_impact_severity(scen_vc=0.81, los_drop=1, scen_los="D", base_los="C", vc_change=0.03) == "WORSENED"
+
+    # 5. D -> E (0.86 -> 0.92, +0.06) -> HIGH (reaching LOS E with worsening)
+    assert classify_impact_severity(scen_vc=0.92, los_drop=1, scen_los="E", base_los="D", vc_change=0.06) == "HIGH"
+
+    # 6. C -> E (0.75 -> 0.93, +0.18) -> HIGH (los_drop >= 2)
+    assert classify_impact_severity(scen_vc=0.93, los_drop=2, scen_los="E", base_los="C", vc_change=0.18) == "HIGH"
+
+    # 7. E -> F (0.99 -> 1.00, +0.01) -> CRITICAL
+    assert classify_impact_severity(scen_vc=1.00, los_drop=1, scen_los="F", base_los="E", vc_change=0.01) == "CRITICAL"
+
+    # 8. F -> F (1.10 -> 1.10, +0.00) -> CRITICAL (pre-existing critical road)
+    assert classify_impact_severity(scen_vc=1.10, los_drop=0, scen_los="F", base_los="F", vc_change=0.00) == "CRITICAL"
+
+    # 9. F -> F (1.05 -> 1.06, +0.01) -> CRITICAL
+    assert classify_impact_severity(scen_vc=1.06, los_drop=0, scen_los="F", base_los="F", vc_change=0.01) == "CRITICAL"
+
+    # 10. V/C crossing 1.0 (0.85 -> 1.05, D -> F, +0.20) -> CRITICAL
+    assert classify_impact_severity(scen_vc=1.05, los_drop=2, scen_los="F", base_los="D", vc_change=0.20) == "CRITICAL"
+
+    # 11. No-change road (0.40 -> 0.40, A -> A, +0.00) -> LOW
+    assert classify_impact_severity(scen_vc=0.40, los_drop=0, scen_los="A", base_los="A", vc_change=0.00) == "LOW"
+
+    # 12. Minor change without LOS drop (0.40 -> 0.41, A -> A, +0.01) -> LOW
+    assert classify_impact_severity(scen_vc=0.41, los_drop=0, scen_los="A", base_los="A", vc_change=0.01) == "LOW"
+
+
 

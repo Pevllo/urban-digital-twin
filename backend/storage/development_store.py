@@ -20,7 +20,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 DB_PATH = DATA_DIR / "developments.db"
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 
 
 def _connect() -> sqlite3.Connection:
@@ -98,7 +98,7 @@ def create_development(dev: dict) -> dict:
                 )
         finally:
             conn.close()
-    return get_development(dev_id)
+        return get_development(dev_id)
 
 
 def get_development(dev_id: str) -> dict | None:
@@ -128,11 +128,11 @@ def list_developments() -> list[dict]:
 
 def update_development(dev_id: str, dev: dict) -> dict | None:
     with _lock:
+        existing = get_development(dev_id)
+        if not existing:
+            return None
         conn = _connect()
         try:
-            existing = get_development(dev_id)
-            if not existing:
-                return None
             with conn:
                 conn.execute(
                     """
@@ -167,7 +167,7 @@ def update_development(dev_id: str, dev: dict) -> dict | None:
                 )
         finally:
             conn.close()
-    return get_development(dev_id)
+        return get_development(dev_id)
 
 
 def delete_development(dev_id: str) -> bool:

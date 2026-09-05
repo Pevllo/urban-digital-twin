@@ -57,11 +57,13 @@ export function classifyBaselineTraffic(vcRatio) {
 }
 
 /**
+/**
  * Classify scenario traffic condition and development impact.
- * Evaluates the individual road segment assessment against the visual hierarchy:
- * - CRITICAL: scenario_vc >= 1.00 OR severity === "CRITICAL" OR scenario_los === "F" -> #b91c1c (width * 1.6)
- * - HIGH: severity === "HIGH" OR los_drop >= 2 OR vc_change >= 0.15 -> #ef4444 (width * 1.6)
- * - MODERATE / WORSENED: is_los_worsened === true OR vc_change >= 0.05 -> #f97316 (width * 1.6)
+ * Directly consumes the authoritative backend `impact_severity` when present,
+ * or applies the exact same centralized decision rules:
+ * - CRITICAL: severity === "CRITICAL" OR scenario_vc >= 1.00 OR scenario_los === "F" -> #b91c1c (width * 1.6)
+ * - HIGH: severity === "HIGH" OR los_drop >= 2 OR (scenario_los === "E" AND (los_drop >= 1 OR vc_change >= 0.05)) -> #ef4444 (width * 1.6)
+ * - WORSENED: severity === "WORSENED" OR severity === "MODERATE" OR is_los_worsened OR vc_change >= 0.05 -> #f97316 (width * 1.6)
  * - MODERATE CHANGE: vc_change >= 0.02 -> #eab308 (base width)
  * - UNAFFECTED: vc_change < 0.02 -> retain baseline road color (base width)
  */
@@ -75,10 +77,11 @@ export function classifyScenarioRoadImpact(assessment, baseRecord = null) {
   const scenLos = assessment.scenario_los;
   const losDrop = Number(assessment.los_change_levels ?? 0);
 
-  // 1. Critical Impact
-  if (scenVc >= 1.00 || severity === "CRITICAL" || scenLos === "F") {
+  // 1. Critical Impact (V/C >= 1.0, LOS F, or backend CRITICAL)
+  if (severity === "CRITICAL" || scenVc >= 1.00 || scenLos === "F") {
     return {
       status: "CRITICAL",
+      severity: "critical",
       color: TRAFFIC_COLORS.CRITICAL,
       hex: TRAFFIC_HEX.CRITICAL,
       label: "Critical Impact",
@@ -86,10 +89,16 @@ export function classifyScenarioRoadImpact(assessment, baseRecord = null) {
     };
   }
 
-  // 2. High Impact
-  if (severity === "HIGH" || losDrop >= 2 || vcChange >= 0.15) {
+  // 2. High Impact (Significant LOS drop >= 2 or reaching LOS E with worsening)
+  // Note: A -> A is NEVER High Impact even if delta V/C is large
+  if (
+    severity === "HIGH" ||
+    losDrop >= 2 ||
+    ((scenLos === "E" || scenVc >= 0.90) && (losDrop >= 1 || vcChange >= 0.05))
+  ) {
     return {
       status: "HIGH_IMPACT",
+      severity: "high",
       color: TRAFFIC_COLORS.HIGH_IMPACT,
       hex: TRAFFIC_HEX.HIGH_IMPACT,
       label: "High Impact",
@@ -97,10 +106,17 @@ export function classifyScenarioRoadImpact(assessment, baseRecord = null) {
     };
   }
 
-  // 3. Moderate / Worsened
-  if (isWorsened || vcChange >= 0.05) {
+  // 3. Worsened (Minor LOS drop 1 level, OR material delta V/C >= 0.05 on unchanged LOS)
+  if (
+    severity === "WORSENED" ||
+    severity === "MODERATE" ||
+    isWorsened ||
+    losDrop >= 1 ||
+    vcChange >= 0.05
+  ) {
     return {
       status: "WORSENED",
+      severity: "worsened",
       color: TRAFFIC_COLORS.WORSENED,
       hex: TRAFFIC_HEX.WORSENED,
       label: "Worsened",
@@ -112,6 +128,7 @@ export function classifyScenarioRoadImpact(assessment, baseRecord = null) {
   if (vcChange >= 0.02) {
     return {
       status: "MODERATE",
+      severity: "low",
       color: TRAFFIC_COLORS.MODERATE,
       hex: TRAFFIC_HEX.MODERATE,
       label: "Moderate Impact",
@@ -139,6 +156,7 @@ export function classifyScenarioRoadImpact(assessment, baseRecord = null) {
 
   return {
     status: "HEALTHY",
+    severity: "low",
     color: baseColor,
     hex: baseHex,
     label: baseLabel,
@@ -151,16 +169,19 @@ export function classifyScenarioRoadImpact(assessment, baseRecord = null) {
  */
 export function getScenarioAssessmentSeverityRank(assessment) {
   if (!assessment) return 0;
+  const severity = (assessment.impact_severity || "").toUpperCase();
+  if (severity === "CRITICAL") return 5;
+  if (severity === "HIGH") return 4;
+  if (severity === "WORSENED" || severity === "MODERATE") return 3;
+
   const scenVc = Number(assessment.scenario_vc ?? assessment.baseline_vc ?? 0);
   const vcChange = Number(assessment.vc_change ?? 0);
-  const isWorsened = Boolean(assessment.is_los_worsened);
-  const severity = (assessment.impact_severity || "").toUpperCase();
   const scenLos = assessment.scenario_los;
   const losDrop = Number(assessment.los_change_levels ?? 0);
 
-  if (scenVc >= 1.00 || severity === "CRITICAL" || scenLos === "F") return 5;
-  if (severity === "HIGH" || losDrop >= 2 || vcChange >= 0.15) return 4;
-  if (isWorsened || severity === "MODERATE" || losDrop >= 1 || vcChange >= 0.05) return 3;
+  if (scenVc >= 1.00 || scenLos === "F") return 5;
+  if (losDrop >= 2 || ((scenLos === "E" || scenVc >= 0.90) && (losDrop >= 1 || vcChange >= 0.05))) return 4;
+  if (losDrop >= 1 || vcChange >= 0.05) return 3;
   if (vcChange >= 0.02) return 2;
   return 1;
 }

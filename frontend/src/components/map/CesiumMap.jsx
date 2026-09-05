@@ -105,7 +105,6 @@ export function CesiumMap() {
   const viewerRef = useRef(null);
   const layerGroupsRef = useRef({});
   const activeBasemapLayerRef = useRef(null);
-  const spatialReady = useRef(false);
   const didInitialFly = useRef(false);
 
   const { state, dispatch } = useApp();
@@ -136,13 +135,12 @@ export function CesiumMap() {
     simulationResultRef.current = simulationResult;
   }, [developments, placedDev, layerVisibility, trafficBaseline, trafficScenario, simulationResult]);
 
-  // ---- Init once ----
+  // ---- Init viewer & spatial layers atomically ----
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
 
-    // Reset per-viewer guards (StrictMode re-mounts effects in dev, and these
-    // refs persist across the remount; they must reset for the new viewer).
-    spatialReady.current = false;
+    let isDisposed = false;
+    let removeTerrainListener = null;
     didInitialFly.current = false;
 
     const viewer = new Viewer(containerRef.current, {
@@ -177,6 +175,18 @@ export function CesiumMap() {
 
     viewerRef.current = viewer;
 
+    // Build static spatial layers atomically on viewer creation
+    viewer.entities.suspendEvents();
+    try {
+      buildRoads(viewer, layerGroupsRef, trafficBaselineRef.current, trafficScenarioRef.current);
+      buildBuildings(viewer, layerGroupsRef);
+      buildOsmBoundaries(viewer, layerGroupsRef);
+    } finally {
+      if (!viewer.isDestroyed()) {
+        viewer.entities.resumeEvents();
+      }
+    }
+
     // Immediately position camera on the actual OSM project area on first frame
     flyToCityArea(viewer, null, 0);
 
@@ -184,20 +194,20 @@ export function CesiumMap() {
       const terrainObj = Terrain.fromWorldTerrain();
       viewer.scene.setTerrain(terrainObj);
       const enableDepthTesting = () => {
-        if (!viewer.isDestroyed()) {
-          viewer.scene.globe.depthTestAgainstTerrain = true;
+        if (!isDisposed && viewerRef.current && !viewerRef.current.isDestroyed()) {
+          viewerRef.current.scene.globe.depthTestAgainstTerrain = true;
         }
       };
       if (terrainObj.ready) {
         enableDepthTesting();
-      } else {
-        terrainObj.readyEvent.addEventListener(enableDepthTesting);
+      } else if (terrainObj.readyEvent) {
+        removeTerrainListener = terrainObj.readyEvent.addEventListener(enableDepthTesting);
       }
 
       createOsmBuildingsAsync()
         .then((tileset) => {
-          if (viewer.isDestroyed()) return;
-          viewer.scene.primitives.add(tileset);
+          if (isDisposed || !viewerRef.current || viewerRef.current.isDestroyed()) return;
+          viewerRef.current.scene.primitives.add(tileset);
         })
         .catch(() => {
           // basemap + local entities still work
@@ -207,7 +217,9 @@ export function CesiumMap() {
     // ---- Location, Development, and Road selection ----
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((click) => {
-      const picked = viewer.scene.pick(click.position);
+      if (isDisposed || !viewerRef.current || viewerRef.current.isDestroyed()) return;
+      const curViewer = viewerRef.current;
+      const picked = curViewer.scene.pick(click.position);
       if (picked && picked.id) {
         const entity = picked.id;
 
@@ -264,11 +276,11 @@ export function CesiumMap() {
       }
 
       // 3. Normal location click
-      const ray = viewer.camera.getPickRay(click.position);
+      const ray = curViewer.camera.getPickRay(click.position);
       if (!ray) return;
-      let cartesian = viewer.scene.globe.pick(ray, viewer.scene);
+      let cartesian = curViewer.scene.globe.pick(ray, curViewer.scene);
       if (!cartesian) {
-        cartesian = viewer.scene.pickPosition(click.position);
+        cartesian = curViewer.scene.pickPosition(click.position);
       }
       if (!cartesian) return;
       const carto = Cartographic.fromCartesian(cartesian);
@@ -292,18 +304,33 @@ export function CesiumMap() {
     }, ScreenSpaceEventType.LEFT_CLICK);
 
     CesiumMapApi.register({
-      flyToCity: () => flyToCityArea(viewer, cityInfo),
+      flyToCity: () => flyToCityArea(viewerRef.current, cityInfo),
     });
 
     return () => {
+      isDisposed = true;
       CesiumMapApi.unregister();
+      if (typeof removeTerrainListener === "function") {
+        try {
+          removeTerrainListener();
+        } catch {
+          // no-op
+        }
+      }
       try {
-        handler.destroy();
+        if (!handler.isDestroyed()) {
+          handler.destroy();
+        }
       } catch {
         // no-op
       }
+      // Reset layer references and active layers
+      layerGroupsRef.current = {};
+      activeBasemapLayerRef.current = null;
       if (viewerRef.current) {
-        viewerRef.current.destroy();
+        if (!viewerRef.current.isDestroyed()) {
+          viewerRef.current.destroy();
+        }
         viewerRef.current = null;
       }
     };
@@ -313,7 +340,7 @@ export function CesiumMap() {
   // ---- Switch basemap imagery layer without touching entities or camera ----
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
 
     let isCancelled = false;
 
@@ -334,14 +361,19 @@ export function CesiumMap() {
         return;
       }
 
+      const curViewer = viewerRef.current;
       // Remove existing basemap layer safely
-      if (activeBasemapLayerRef.current && viewer.imageryLayers.contains(activeBasemapLayerRef.current)) {
-        viewer.imageryLayers.remove(activeBasemapLayerRef.current, true);
+      if (
+        activeBasemapLayerRef.current &&
+        !activeBasemapLayerRef.current.isDestroyed?.() &&
+        curViewer.imageryLayers.contains(activeBasemapLayerRef.current)
+      ) {
+        curViewer.imageryLayers.remove(activeBasemapLayerRef.current, true);
       }
 
-      viewer.imageryLayers.add(resultLayer, 0);
+      curViewer.imageryLayers.add(resultLayer, 0);
       activeBasemapLayerRef.current = resultLayer;
-      viewer.scene.requestRender();
+      curViewer.scene.requestRender();
     }
 
     applyBasemap();
@@ -351,40 +383,25 @@ export function CesiumMap() {
     };
   }, [basemap]);
 
-  // ---- Render OSM buildings + roads once ----
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || spatialReady.current) return;
-    spatialReady.current = true;
-
-    viewer.entities.suspendEvents();
-    try {
-      buildRoads(viewer, layerGroupsRef, trafficBaselineRef.current, trafficScenarioRef.current);
-      buildBuildings(viewer, layerGroupsRef);
-      buildOsmBoundaries(viewer, layerGroupsRef);
-    } finally {
-      viewer.entities.resumeEvents();
-    }
-  }, []);
-
   // ---- Update road traffic materials without rebuilding datasource ----
   useEffect(() => {
-    const roadsGroup = layerGroupsRef.current.roads;
     const viewer = viewerRef.current;
-    if (!roadsGroup || !viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
+    const roadsGroup = layerGroupsRef.current?.roads;
+    if (!roadsGroup || roadsGroup.isDestroyed?.()) return;
     updateRoadTrafficVisuals(roadsGroup, trafficBaseline, trafficScenario, viewer);
   }, [trafficBaseline, trafficScenario]);
 
   // ---- Render project boundary (static, based on city metadata) ----
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
     renderBoundary(viewer, cityInfo, layerGroupsRef);
   }, [cityInfo]);
 
   // ---- Fly to project area when metadata arrives ----
   useEffect(() => {
-    if (!viewerRef.current || !cityInfo || didInitialFly.current) return;
+    if (!viewerRef.current || viewerRef.current.isDestroyed() || !cityInfo || didInitialFly.current) return;
     flyToCityArea(viewerRef.current, cityInfo);
     didInitialFly.current = true;
     dispatch({ type: "MAP_VIEWER_READY" });
@@ -392,26 +409,30 @@ export function CesiumMap() {
 
   // ---- Apply layer visibility ----
   useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
     const setVisible = (key, visible) => {
-      const group = layerGroupsRef.current[key];
-      if (group) group.show = visible;
+      const group = layerGroupsRef.current?.[key];
+      if (group && !group.isDestroyed?.()) {
+        group.show = visible;
+      }
     };
     setVisible("roads", layerVisibility.roads);
     setVisible("buildings", layerVisibility.buildings);
     setVisible("boundary", layerVisibility.projectBoundary);
     setVisible("osmBoundaries", layerVisibility.osmBoundaries);
     setVisible("developments", layerVisibility.developments);
-    if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-      viewerRef.current.scene.requestRender();
-    }
+    viewer.scene.requestRender();
   }, [layerVisibility]);
 
   // ---- Render developments ----
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
-    const old = layerGroupsRef.current.developments;
-    if (old) viewer.dataSources.remove(old);
+    if (!viewer || viewer.isDestroyed()) return;
+    const old = layerGroupsRef.current?.developments;
+    if (old && !old.isDestroyed?.() && viewer.dataSources.contains(old)) {
+      viewer.dataSources.remove(old, true);
+    }
 
     const group = new CustomDataSource("Developments");
     group.show = Boolean(layerVisibilityRef.current?.developments);
@@ -430,7 +451,7 @@ export function CesiumMap() {
   // ---- Render selected location marker ----
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
     renderSelectedMarker(viewer, selectedLocation, placedDev, selectedDev);
     viewer.scene.requestRender();
   }, [selectedLocation, placedDev, selectedDev]);
@@ -462,6 +483,7 @@ function flyToCityArea(viewer, _info, duration = 2.0) {
 }
 
 function buildRoads(viewer, layerGroupsRef, baselineTraffic, scenarioTraffic) {
+  if (!viewer || viewer.isDestroyed()) return;
   const group = new CustomDataSource("Roads");
   viewer.dataSources.add(group);
   layerGroupsRef.current.roads = group;
@@ -505,7 +527,7 @@ function buildRoads(viewer, layerGroupsRef, baselineTraffic, scenarioTraffic) {
 }
 
 function updateRoadTrafficVisuals(roadsGroup, baselineRoads, scenarioAssessments, viewer) {
-  if (!roadsGroup) return;
+  if (!roadsGroup || roadsGroup.isDestroyed?.() || !viewer || viewer.isDestroyed()) return;
 
   const isScenarioActive = Array.isArray(scenarioAssessments) && scenarioAssessments.length > 0;
 
@@ -623,7 +645,9 @@ function updateRoadTrafficVisuals(roadsGroup, baselineRoads, scenarioAssessments
       }
     }
   } finally {
-    roadsGroup.entities.resumeEvents();
+    if (!roadsGroup.isDestroyed?.()) {
+      roadsGroup.entities.resumeEvents();
+    }
   }
 
   if (baselineMap.size > 0 || isScenarioActive) {
@@ -644,6 +668,7 @@ function updateRoadTrafficVisuals(roadsGroup, baselineRoads, scenarioAssessments
 }
 
 function buildBuildings(viewer, layerGroupsRef) {
+  if (!viewer || viewer.isDestroyed()) return;
   const group = new CustomDataSource("Buildings");
   viewer.dataSources.add(group);
   layerGroupsRef.current.buildings = group;
@@ -674,6 +699,7 @@ function buildBuildings(viewer, layerGroupsRef) {
 }
 
 function buildOsmBoundaries(viewer, layerGroupsRef) {
+  if (!viewer || viewer.isDestroyed()) return;
   const group = new CustomDataSource("OSM Boundaries");
   viewer.dataSources.add(group);
   layerGroupsRef.current.osmBoundaries = group;
@@ -700,10 +726,13 @@ function buildOsmBoundaries(viewer, layerGroupsRef) {
 }
 
 function renderBoundary(viewer, info, layerGroupsRef) {
+  if (!viewer || viewer.isDestroyed()) return;
   // Remove any existing boundary group before re-adding to avoid duplicates
   // (this effect re-runs when city metadata eventually loads).
-  const existing = layerGroupsRef.current.boundary;
-  if (existing) viewer.dataSources.remove(existing);
+  const existing = layerGroupsRef.current?.boundary;
+  if (existing && !existing.isDestroyed?.() && viewer.dataSources.contains(existing)) {
+    viewer.dataSources.remove(existing, true);
+  }
 
   const b = getProjectBounds(info);
   const positions = Cartesian3.fromDegreesArray([
@@ -730,13 +759,16 @@ function renderBoundary(viewer, info, layerGroupsRef) {
   });
 }
 
-
-
 function renderSelectedMarker(viewer, location, placedDev, selectedDev) {
+  if (!viewer || viewer.isDestroyed()) return;
   const toRemove = viewer.entities.values.filter((e) =>
     e.id && String(e.id).startsWith("selected-loc-"),
   );
-  toRemove.forEach((e) => viewer.entities.remove(e));
+  toRemove.forEach((e) => {
+    if (!viewer.isDestroyed()) {
+      viewer.entities.remove(e);
+    }
+  });
 
   // Hide the selection marker if no location is selected, or if a development is placed or selected
   if (!location || location.latitude == null || location.longitude == null) return;
