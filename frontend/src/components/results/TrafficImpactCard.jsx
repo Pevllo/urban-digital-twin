@@ -1,5 +1,6 @@
 import { Car } from "lucide-react";
 import { formatNumber } from "../../utils/format.js";
+import { classifyScenarioRoadImpact, extractOsmWayId } from "../../utils/trafficColors.js";
 
 function bottleneckKey(bottleneck) {
   return `${bottleneck.road_id || "road"}`;
@@ -114,19 +115,45 @@ export function TrafficImpactCard({ stage1, stage3, stage4 }) {
 
           {topBottlenecks.length > 0 && (
             <div className="bottlenecks">
-              <div className="bottlenecks-title">Top bottlenecks</div>
+              <div className="bottlenecks-title">Top Affected Bottlenecks</div>
               <ul className="bottleneck-list">
-                {topBottlenecks.slice(0, 5).map((b) => (
-                  <li key={bottleneckKey(b)} className="bottleneck-row">
-                    <span className="bottleneck-road">
-                      {b.road_type || "road"} {b.road_id || ""}
-                    </span>
-                    <span className="bottleneck-vc">
-                      V/C {formatNumber(b.scenario_vc, 2)}
-                      {b.is_los_worsened ? " · worsened" : ""}
-                    </span>
-                  </li>
-                ))}
+                {topBottlenecks.slice(0, 5).map((b) => {
+                  const wayId = extractOsmWayId(b.road_id);
+                  const impact = classifyScenarioRoadImpact(b);
+                  const deltaVc = b.vc_change ?? (b.scenario_vc !== undefined && b.baseline_vc !== undefined ? b.scenario_vc - b.baseline_vc : undefined);
+                  const losTrans = b.baseline_los && b.scenario_los ? `${b.baseline_los} → ${b.scenario_los}` : null;
+
+                  return (
+                    <li key={bottleneckKey(b)} className="bottleneck-row">
+                      <div className="bottleneck-road-info">
+                        <span className="bottleneck-road">
+                          {b.road_type || b.highway || "Road"} <span className="font-mono">#{wayId}</span>
+                        </span>
+                        {losTrans && (
+                          <span className="bottleneck-los">LOS {losTrans}</span>
+                        )}
+                      </div>
+                      <div className="bottleneck-stats">
+                        <span className="bottleneck-vc font-mono">
+                          V/C {formatNumber(b.scenario_vc, 2)}
+                          {deltaVc !== undefined && (
+                            <span className="bottleneck-delta"> ({formatChange(deltaVc)})</span>
+                          )}
+                        </span>
+                        <span
+                          className="badge bottleneck-badge"
+                          style={{
+                            backgroundColor: `${impact.hex}22`,
+                            color: impact.hex,
+                            borderColor: `${impact.hex}55`,
+                          }}
+                        >
+                          {impact.label}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

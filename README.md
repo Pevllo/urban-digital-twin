@@ -1,145 +1,139 @@
 # AI Urban Digital Twin + What-If Mobility Simulator
 
-An end-to-end 3D AI Urban Digital Twin and mobility simulation platform designed for land-use scenario planning, traffic impact modeling, and congestion assessment in modern urban environments.
+An end-to-end 3D AI Urban Digital Twin and multi-domain simulation platform designed for land-use scenario planning, traffic impact assessment, urban utilities modeling (power, water, waste), and environmental footprint evaluation in modern urban environments.
 
 ---
 
-## Target Architecture
+## 🌟 Key Features
+
+- **3D CesiumJS Command Center**: High-performance 3D visualization centered around the New Administrative Capital (R3 District) with OSM buildings, boundaries, and high-resolution imagery.
+- **Dynamic Basemap Switcher**: Seamless toggling between High-Resolution Satellite imagery and Google Roadmap without reloading map layers or resetting camera context.
+- **Dynamic Traffic & Mobility Visualization**: Real-time coloring of road networks based on baseline Volume-to-Capacity (V/C) ratios and What-If scenario impact classifications (Healthy, Moderate, Worsened, High, Critical).
+- **Procedural 3D Development Placement & Editing**: Interactive placement of realistic 3D architectural complexes (Residential Compounds, Hospitals, Schools, Malls, Offices, Mixed-Use) with collision detection, setback validation, and in-place configuration editing.
+- **Comprehensive Full Report View**: Contained, responsive dashboard with executive summary, traffic assignment parameters, critical corridor bottlenecks, and multi-utility resource models (Electricity kWh, Water m³/hr, Solid Waste kg, CO₂ footprint).
+- **Building What-If Report History & Versioning**: Completed simulations are persistently linked to buildings, retaining historical configuration snapshots and automatically identifying `CURRENT` vs `OUTDATED` scenarios.
+- **Persistent SQLite Store**: Backend persistence for proposed developments and scenario parameters.
+
+---
+
+## 🏗️ Architecture Overview
 
 ```
 urban-digital-twin/
 │
-├── frontend/                     # 3D Digital Twin UI (Vite + CesiumJS)
+├── frontend/                     # 3D Digital Twin UI (Vite + React + CesiumJS)
 │   ├── src/
-│   │   ├── components/           # Map, Development, Simulation, Dashboard, UI
-│   │   │   ├── map/              # 3D MapContainer, MapLayers, Renderer, Overlay
-│   │   │   ├── development/      # Palette, DevelopmentCards, Modal, List
-│   │   │   ├── simulation/       # Simulation Controls & Results
-│   │   │   ├── dashboard/        # KPIs, Metrics & Charts
-│   │   │   └── ui/               # Header, StatusBanner, DebugPanel, Modals
-│   │   ├── pages/                # App pages (DigitalTwinPage)
-│   │   ├── hooks/                # Custom React/JS interaction hooks (usePlacement)
-│   │   ├── services/             # API clients & Model Adapters
-│   │   ├── state/                # Central ScenarioState & DevelopmentStore
-│   │   ├── utils/                # Geo Math, Buildability Engine & Zone Resolvers
-│   │   ├── types/                # Canonical Shared Development Model
-│   │   └── data/                 # GeoJSON & Spatial datasets
-│   ├── public/
+│   │   ├── api/                  # API client, developments, scenarios, utilities
+│   │   ├── components/           # UI Components
+│   │   │   ├── common/           # Error messages, panels, modals
+│   │   │   ├── development/      # Palette, forms, details, report history, delete modal
+│   │   │   ├── layout/           # AppShell, TopBar, Navigation, WorkflowPanel
+│   │   │   ├── map/              # Cesium viewer, 3D layouts, layers, inspector, basemap
+│   │   │   ├── pages/            # Command Center, Infrastructure, Data Layers, Full Report
+│   │   │   ├── results/          # Summary cards, traffic details, impact overview
+│   │   │   └── simulation/       # What-If engine controls and progress
+│   │   ├── services/             # Development, simulation, report & basemap services
+│   │   ├── store/                # Central AppContext (reducer & state store)
+│   │   ├── tests/                # Frontend test suites (traffic, placement, delete, reports)
+│   │   └── utils/                # Geo math, traffic colors, formatters
 │   ├── package.json
 │   └── vite.config.js
 │
-├── backend/                      # Python REST API Server (FastAPI)
+├── backend/                      # Python REST API Server (FastAPI + SQLite)
 │   ├── api/
-│   │   ├── routes/               # city, map, developments, scenarios, traffic, trip_demand
-│   │   ├── services/             # Simulator service bridges
-│   │   ├── schemas/              # Pydantic data schemas
-│   │   └── controllers/
-│   ├── main.py                   # Server entry point
-│   ├── requirements.txt
-│   └── README.md
+│   │   ├── routes/               # developments, scenarios, traffic, city, map, water, waste
+│   │   ├── services/             # Simulator bridges & ML inference adapters
+│   │   └── schemas/              # Pydantic validation schemas
+│   ├── storage/                  # SQLite development & report store
+│   └── main.py                   # Server entry point & routing
 │
 ├── models/                       # Computational AI & Mobility Models
 │   ├── traffic-model/            # 4-stage What-If Simulator & Network Assignment Engine
-│   ├── trip-demand-model/       # Trip Generation Engine & Baseline XGBoost Regressor
-│   └── README.md
+│   └── trip-demand-model/        # Trip Generation Engine & Baseline XGBoost Regressors
 │
-├── data/                         # Central Data Store
-│   ├── osm/                      # Raw & processed OpenStreetMap files
-│   ├── city/                     # City boundary & GIS layers
-│   ├── processed/                # Road networks & spatial features
-│   └── scenarios/                # Preserved scenario definitions
-│
-├── docs/                         # Documentation
-│   ├── architecture/             # Architecture overview & diagrams
-│   ├── api/                      # OpenAPI specs
-│   └── models/                   # Mobility pipeline documentation
-│
-├── scripts/                      # Project automation scripts
+├── tests/                        # Backend API contract test suite
 ├── .gitignore
 └── README.md
 ```
 
 ---
 
-## Development Placement Architecture
+## 🔄 What-If Simulation & Workflow
 
 ```
-User selects land-use card (Residential, Hospital, Mall, School, Office, Hotel, Mixed-Use)
-       │
-       ▼
-Placement Mode Active (usePlacement hook controller)
-       │
-       ▼
-Move pointer across 3D Map (Cesium pickPosition + terrain raycasting)
-       │  * Temporary preview entities excluded during raycast to avoid height snapping
-       ▼
-Buildability Engine (src/utils/buildabilityEngine.js)
-       │  * Validates real footprint dimensions & setback buffers against road corridors & existing structures
-       ▼
-Click valid location on 3D map → Open Properties Modal (src/types/development.js)
-       │  * User configures height, floors, capacity, GLA, residents, employees
-       ▼
-DevelopmentStore & ScenarioState updated (src/state/devStore.js)
-       │
-       ▼
-3D Entity Renderer (src/components/map/DevelopmentRenderer.js)
-       │  * Creates persistent selectable 3D building volume using user properties
-       ▼
-Run What-If Simulation (POST /api/simulate bridge)
-       │
-       ▼
-Python 4-Stage Mobility Simulator (models/traffic-model/src/simulator.py)
-       │  * Stage 1: Trip Generation → Stage 2: Routing → Stage 3: Aggregation → Stage 4: Impact (V/C & LOS)
-       ▼
-UI Dashboard & Metric Cards Updated
+1. SELECT OR PLACE BUILDING
+   ├── Select coordinates on 3D map
+   ├── Configure type (Residential, Healthcare, Commercial, etc.)
+   └── Save development to persistent database
+   ↓
+2. RUN WHAT-IF SIMULATION
+   ├── Multi-domain simulation engine executes (Traffic, Power, Water, Waste, CO₂)
+   ├── Road network updates dynamically with scenario impact colors
+   └── Full Report is generated and attached to the building
+   ↓
+3. ACCESS COMPLETED WHAT-IF REPORTS
+   ├── View Latest Report directly from Building Details
+   └── Access historical reports list with full original snapshots
+   ↓
+4. EDIT DEVELOPMENT & RE-SIMULATION
+   ├── Edit parameters in-place (Floors, Beds, Units, GFA)
+   ├── Previous reports are safely retained and flagged as OUTDATED
+   ├── Roads reset to baseline until the updated scenario is executed
+   └── New simulation generates a new CURRENT report
 ```
 
 ---
 
-## How Components Communicate
+## 🚦 Traffic Color Legend
 
-1. **Frontend UI & State**: `DevelopmentStore` and `scenarioState` form the single source of truth. Any CRUD action (add, edit, move, delete) automatically triggers updates in the `DevelopmentRenderer` and sidebar list.
-2. **Placement & Buildability**: `usePlacement` handles pointer drag and click interactions. `geoUtils` calculates exact 3D geographic coordinates (`pickGeographicLocation`), and `buildabilityEngine` tests real-world footprint geometry against road centerlines and existing structures.
-3. **Backend API Bridge**: The frontend posts simulation requests via `services/api/simulationApi.js`. The Vite dev server proxies `/api/simulate` directly to `models/traffic-model/scripts/run_simulation_cli.py`, or routes to the standalone FastAPI server in `backend/main.py`.
+| Status / Severity | V/C Ratio / Change | Color Hex | Visual Meaning |
+|:---|:---|:---|:---|
+| **Optimal / Healthy** | $V/C < 0.60$ | `#10b981` (Green) | Free-flow traffic; minimal impact |
+| **Moderate** | $0.60 \le V/C < 0.80$ | `#eab308` (Yellow) | Moderate volume; stable flow |
+| **Worsened / High** | $0.80 \le V/C < 1.00$ | `#f97316` (Orange) | Significant delay; LOS deteriorated |
+| **Critical** | $V/C \ge 1.00$ | `#b91c1c` (Dark Red) | At or above capacity; severe bottleneck |
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
-### 1. Frontend Setup & 3D Viewer
+### 1. Prerequisites
+- **Node.js**: v18+
+- **Python**: v3.10+
+- **Cesium Ion Token**: Set in `frontend/.env`
 
+### 2. Frontend Setup
 ```bash
-# Navigate to frontend directory
 cd frontend
-
-# Install dependencies
 npm install
-
-# Set your Cesium Ion access token in frontend/.env
-# VITE_CESIUM_ION_TOKEN=your_cesium_token_here
-
-# Run dev server
 npm run dev
 ```
+The frontend UI will start at `http://localhost:5173`.
 
-The frontend web application will start at `http://localhost:3000`.
-
-### 2. Python Backend API Server
-
+### 3. Backend Setup
 ```bash
-# Install backend requirements
+# From repository root
 pip install -r backend/requirements.txt
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+API Documentation is available at `http://127.0.0.1:8000/docs`.
 
-# Run FastAPI backend server
-python -m backend.main
+---
+
+## 🧪 Testing & Validation
+
+### Run Frontend Tests
+```bash
+cd frontend
+npm run lint
+npm run build
+node src/tests/buildingReports.test.js
+node src/tests/trafficMapping.test.js
+node src/tests/spatialPlacement.test.js
+node src/tests/deleteDevelopment.test.js
 ```
 
-The REST API server will run at `http://localhost:8000`. API documentation is available at `http://localhost:8000/docs`.
-
-### 3. Running Model Tests
-
+### Run Backend Contract Tests
 ```bash
-# Run unit tests for traffic model and trip demand model
-python -m pytest models/traffic-model/tests
-python -m pytest models/trip-demand-model/tests
+python -m pytest tests/
 ```

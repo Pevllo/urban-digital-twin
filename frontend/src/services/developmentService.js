@@ -1,4 +1,8 @@
-import { createDevelopment, deleteDevelopment } from "../api/developments.js";
+import {
+  createDevelopment,
+  updateDevelopment,
+  deleteDevelopment,
+} from "../api/developments.js";
 
 // The backend POST /api/v1/developments REQUIRES a development_id in the
 // request (it returns 400 "development_id is required." otherwise) and does
@@ -30,6 +34,10 @@ export function buildDevelopmentPayload({ type, name, latitude, longitude, floor
 
 export async function placeDevelopment(payload) {
   return createDevelopment(payload);
+}
+
+export async function editDevelopment(developmentId, payload) {
+  return updateDevelopment(developmentId, payload);
 }
 
 export async function removeDevelopment(developmentId) {

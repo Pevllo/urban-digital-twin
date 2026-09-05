@@ -14,27 +14,34 @@ export function SimulationPanel() {
   const development = state.development;
   const location = state.map.selectedLocation;
 
-  // The What-If simulation is only valid once a development has actually been
-  // persisted by the backend, so we gate on the real development_id from the
-  // create response (state.development.placed), not merely on a non-null
-  // "placed" placeholder.
-  const placedDevId = development.placed?.development_id || development.placed?.id || null;
+  // The What-If simulation is valid once a development has actually been
+  // persisted by the backend (state.development.placed or state.developments.selected).
+  const placedDevId =
+    development.placed?.development_id ||
+    development.placed?.id ||
+    state.developments.selected?.development_id ||
+    state.developments.selected?.id ||
+    null;
   const devPlaced = Boolean(placedDevId);
 
   async function handleRun() {
     if (!placedDevId) {
       dispatch({
         type: "SIMULATION_ERROR",
-        error: "Place a development before running the What-If simulation.",
+        error: "Place or select a development before running the What-If simulation.",
       });
       return;
     }
     dispatch({ type: "SIMULATION_RUNNING" });
-    const payload = buildSimulationPayload(development, location);
+    const payload = buildSimulationPayload(
+      development,
+      location,
+      state.developments.selected
+    );
     if (!payload.development_id) {
       dispatch({
         type: "SIMULATION_ERROR",
-        error: "Place a development before running the What-If simulation.",
+        error: "Place or select a development before running the What-If simulation.",
       });
       return;
     }

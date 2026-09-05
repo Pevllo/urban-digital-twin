@@ -8,6 +8,7 @@ from backend.storage.development_store import (
     delete_development,
     get_development,
     list_developments,
+    update_development,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,17 @@ def get_development_endpoint(dev_id: str):
             detail=f"Development '{dev_id}' not found.",
         )
     return found
+
+
+@router.put("/{dev_id}")
+def update_development_endpoint(dev_id: str, dev: DevelopmentSchema):
+    updated = update_development(dev_id, _to_store_dict(dev))
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Development '{dev_id}' not found.",
+        )
+    return updated
 
 
 @router.delete("/{dev_id}")

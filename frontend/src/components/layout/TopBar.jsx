@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Box, Plane, Network, Layers } from "lucide-react";
 import { useApp } from "../../store/AppContext.jsx";
 import { Branding } from "./Branding.jsx";
@@ -18,8 +17,8 @@ const NAV_ICONS = {
 };
 
 export function TopBar({ onNavigate }) {
-  const { state } = useApp();
-  const [active, setActive] = useState("digital-twin");
+  const { state, dispatch } = useApp();
+  const active = state.ui?.activeTab || "scenarios";
   const backend = state.backend;
   const city = state.city.info;
 
@@ -28,7 +27,7 @@ export function TopBar({ onNavigate }) {
   const checking = backend.checking;
 
   function navigate(key) {
-    setActive(key);
+    dispatch({ type: "SET_ACTIVE_TAB", tab: key });
     if (onNavigate) onNavigate(key);
   }
 

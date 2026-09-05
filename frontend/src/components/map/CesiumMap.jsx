@@ -30,6 +30,7 @@ import {
   classifyBaselineTraffic,
   classifyScenarioRoadImpact,
   extractOsmWayId,
+  pickMoreSevereScenarioAssessment,
 } from "../../utils/trafficColors.js";
 
 // Pre-configure Cesium's default view to the authoritative OSM project bounds
@@ -116,12 +117,14 @@ export function CesiumMap() {
   const selectedDev = state.developments.selected;
   const cityInfo = state.city.info;
   const trafficBaseline = state.traffic.baseline;
+  const trafficScenario = state.traffic.scenario;
   const simulationResult = state.simulation.result;
 
   const developmentsRef = useRef(developments);
   const placedDevRef = useRef(placedDev);
   const layerVisibilityRef = useRef(layerVisibility);
   const trafficBaselineRef = useRef(trafficBaseline);
+  const trafficScenarioRef = useRef(trafficScenario);
   const simulationResultRef = useRef(simulationResult);
 
   useEffect(() => {
@@ -129,8 +132,9 @@ export function CesiumMap() {
     placedDevRef.current = placedDev;
     layerVisibilityRef.current = layerVisibility;
     trafficBaselineRef.current = trafficBaseline;
+    trafficScenarioRef.current = trafficScenario;
     simulationResultRef.current = simulationResult;
-  }, [developments, placedDev, layerVisibility, trafficBaseline, simulationResult]);
+  }, [developments, placedDev, layerVisibility, trafficBaseline, trafficScenario, simulationResult]);
 
   // ---- Init once ----
   useEffect(() => {
@@ -355,7 +359,7 @@ export function CesiumMap() {
 
     viewer.entities.suspendEvents();
     try {
-      buildRoads(viewer, layerGroupsRef, trafficBaselineRef.current, simulationResultRef.current);
+      buildRoads(viewer, layerGroupsRef, trafficBaselineRef.current, trafficScenarioRef.current);
       buildBuildings(viewer, layerGroupsRef);
       buildOsmBoundaries(viewer, layerGroupsRef);
     } finally {
@@ -368,8 +372,8 @@ export function CesiumMap() {
     const roadsGroup = layerGroupsRef.current.roads;
     const viewer = viewerRef.current;
     if (!roadsGroup || !viewer) return;
-    updateRoadTrafficVisuals(roadsGroup, trafficBaseline, simulationResult, viewer);
-  }, [trafficBaseline, simulationResult]);
+    updateRoadTrafficVisuals(roadsGroup, trafficBaseline, trafficScenario, viewer);
+  }, [trafficBaseline, trafficScenario]);
 
   // ---- Render project boundary (static, based on city metadata) ----
   useEffect(() => {
@@ -457,7 +461,7 @@ function flyToCityArea(viewer, _info, duration = 2.0) {
   });
 }
 
-function buildRoads(viewer, layerGroupsRef, baselineTraffic, simResult) {
+function buildRoads(viewer, layerGroupsRef, baselineTraffic, scenarioTraffic) {
   const group = new CustomDataSource("Roads");
   viewer.dataSources.add(group);
   layerGroupsRef.current.roads = group;
@@ -497,25 +501,22 @@ function buildRoads(viewer, layerGroupsRef, baselineTraffic, simResult) {
   });
 
   // Apply initial traffic materials if data is already present
-  updateRoadTrafficVisuals(group, baselineTraffic, simResult, viewer);
+  updateRoadTrafficVisuals(group, baselineTraffic, scenarioTraffic, viewer);
 }
 
-function updateRoadTrafficVisuals(roadsGroup, baselineRoads, simResult, viewer) {
+function updateRoadTrafficVisuals(roadsGroup, baselineRoads, scenarioAssessments, viewer) {
   if (!roadsGroup) return;
 
-  const roadAssessments = simResult?.stage4_impact_assessment?.road_assessments;
-  const isScenarioActive = Array.isArray(roadAssessments) && roadAssessments.length > 0;
+  const isScenarioActive = Array.isArray(scenarioAssessments) && scenarioAssessments.length > 0;
 
-  // 1. Build lookup map for scenario results
+  // 1. Build lookup map for scenario results with authoritative worst-segment selection
   const scenarioMap = new Map();
   if (isScenarioActive) {
-    roadAssessments.forEach((r) => {
+    scenarioAssessments.forEach((r) => {
       const wayId = extractOsmWayId(r.road_id);
-      // Prioritize worsened/critical segments if multiple exist for this OSM way
+      if (!wayId) return;
       const existing = scenarioMap.get(wayId);
-      if (!existing || r.impact_severity === "CRITICAL" || r.is_los_worsened) {
-        scenarioMap.set(wayId, r);
-      }
+      scenarioMap.set(wayId, pickMoreSevereScenarioAssessment(existing, r));
     });
   }
 
@@ -546,7 +547,8 @@ function updateRoadTrafficVisuals(roadsGroup, baselineRoads, simResult, viewer) 
         const scenRecord = scenarioMap.get(wayId);
         if (scenRecord) {
           matchedScenarioCount++;
-          const impact = classifyScenarioRoadImpact(scenRecord);
+          const baseRecord = baselineMap.get(wayId);
+          const impact = classifyScenarioRoadImpact(scenRecord, baseRecord);
           entity.polyline.material = new ColorMaterialProperty(impact.color);
           entity.polyline.width = impact.isHighlighted ? Math.max(baseW * 1.6, 3.2) : baseW;
           if (entity.properties) {

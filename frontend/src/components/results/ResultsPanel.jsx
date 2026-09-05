@@ -1,4 +1,4 @@
-import { Activity, RefreshCw, Building2 } from "lucide-react";
+import { Activity, RefreshCw, Building2, BarChart2 } from "lucide-react";
 import { useApp } from "../../store/AppContext.jsx";
 import { ImpactOverview } from "./ImpactOverview.jsx";
 import { TrafficDetail } from "./TrafficImpactCard.jsx";
@@ -10,6 +10,10 @@ export function ResultsPanel() {
   const dev = state.development;
 
   if (!data) return null;
+
+  function handleOpenFullReport() {
+    dispatch({ type: "OPEN_FULL_REPORT" });
+  }
 
   function handleNewScenario() {
     dispatch({ type: "SET_NEW_SCENARIO" });
@@ -27,10 +31,16 @@ export function ResultsPanel() {
             <div className="results-subtitle">Urban Impact Overview</div>
           </div>
         </div>
-        <button className="btn secondary small" onClick={handleNewScenario} type="button">
-          <RefreshCw size={13} />
-          New Scenario
-        </button>
+        <div style={{ display: "flex", gap: "6px" }}>
+          <button className="btn primary small" onClick={handleOpenFullReport} type="button">
+            <BarChart2 size={13} />
+            Full Report
+          </button>
+          <button className="btn secondary small" onClick={handleNewScenario} type="button">
+            <RefreshCw size={13} />
+            New Scenario
+          </button>
+        </div>
       </div>
 
       <div className="results-summary">
@@ -53,6 +63,10 @@ export function ResultsPanel() {
       <TrafficDetail stage={data.stage4_impact_assessment} />
 
       <div className="results-footer">
+        <button className="btn primary full cta" onClick={handleOpenFullReport} type="button" style={{ marginBottom: 6 }}>
+          <BarChart2 size={14} />
+          <span>View Comprehensive Assessment Report</span>
+        </button>
         <button className="btn secondary full" onClick={handleNewScenario} type="button">
           <RefreshCw size={14} />
           Start Another Scenario

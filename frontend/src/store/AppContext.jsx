@@ -1,4 +1,10 @@
 import { createContext, useContext, useReducer } from "react";
+import {
+  loadStoredReports,
+  createReportRecord,
+  addReportToCollection,
+  removeReportsForDevelopment,
+} from "../services/reportService.js";
 
 const AppContext = createContext(null);
 
@@ -33,10 +39,11 @@ const initialState = {
     selectedRoad: null, // { id, osm_way_id, name, highway, baseline, scenario }
   },
 
-  // Baseline traffic
+  // Traffic state
   traffic: {
     loading: false,
     baseline: null,
+    scenario: null, // road_assessments from What-If simulation
     error: null,
   },
 
@@ -71,7 +78,15 @@ const initialState = {
     result: null,
   },
 
+  // Persisted What-If simulation reports
+  reports: loadStoredReports(),
+
   ui: {
+    activeTab: "scenarios", // "digital-twin" | "scenarios" | "infrastructure" | "data-layers"
+    fullReportOpen: false,
+    selectedReport: null, // specific historical report record to inspect in FullReportView
+    buildingReportsOpen: false, // report history subview for selected building
+    editingDevelopmentId: null, // development_id currently being edited
     panelOpen: {
       development: true,
       simulation: true,
@@ -176,6 +191,10 @@ function reducer(state, action) {
           selected: action.dev,
           deleteError: null,
         },
+        ui: {
+          ...state.ui,
+          buildingReportsOpen: false,
+        },
       };
     case "DEVELOPMENT_DESELECTED":
       return {
@@ -184,6 +203,10 @@ function reducer(state, action) {
           ...state.developments,
           selected: null,
           deleteError: null,
+        },
+        ui: {
+          ...state.ui,
+          buildingReportsOpen: false,
         },
       };
     case "DEVELOPMENT_DELETING":
@@ -208,8 +231,14 @@ function reducer(state, action) {
         (state.development.placed.development_id === action.developmentId ||
           state.development.placed.id === action.developmentId);
 
+      const cleanedReports = removeReportsForDevelopment(state.reports, action.developmentId);
+      const isSelectedReportDeleted =
+        state.ui.selectedReport &&
+        state.ui.selectedReport.developmentId === action.developmentId;
+
       return {
         ...state,
+        reports: cleanedReports,
         developments: {
           ...state.developments,
           items: remainingItems,
@@ -221,6 +250,11 @@ function reducer(state, action) {
         development: isPlaced
           ? { ...state.development, placed: null }
           : state.development,
+        ui: {
+          ...state.ui,
+          selectedReport: isSelectedReportDeleted ? null : state.ui.selectedReport,
+          buildingReportsOpen: isSelected ? false : state.ui.buildingReportsOpen,
+        },
       };
     }
     case "DEVELOPMENT_DELETE_ERROR":
@@ -265,28 +299,192 @@ function reducer(state, action) {
         ...state,
         development: { ...state.development, placing: false, error: action.error },
       };
+    case "START_EDIT_DEVELOPMENT": {
+      const targetDev = action.dev || state.developments.selected || state.development.placed;
+      if (!targetDev) return state;
+      return {
+        ...state,
+        development: {
+          ...state.development,
+          type: targetDev.development_type || targetDev.type || "residential_compound",
+          name: targetDev.name || "",
+          floors: targetDev.floors || 5,
+          properties: { ...(targetDev.properties || {}) },
+          error: null,
+        },
+        ui: {
+          ...state.ui,
+          editingDevelopmentId: targetDev.development_id || targetDev.id,
+          buildingReportsOpen: false,
+        },
+      };
+    }
+    case "CANCEL_EDIT_DEVELOPMENT":
+      return {
+        ...state,
+        development: {
+          ...state.development,
+          error: null,
+        },
+        ui: {
+          ...state.ui,
+          editingDevelopmentId: null,
+        },
+      };
+    case "DEVELOPMENT_UPDATED": {
+      const updatedDev = action.dev;
+      const devId = updatedDev.development_id || updatedDev.id;
+      const updatedItems = state.developments.items.map((d) =>
+        (d.development_id || d.id) === devId ? { ...d, ...updatedDev } : d
+      );
+      const isSelected =
+        state.developments.selected &&
+        (state.developments.selected.development_id === devId ||
+          state.developments.selected.id === devId);
+      const isPlaced =
+        state.development.placed &&
+        (state.development.placed.development_id === devId ||
+          state.development.placed.id === devId);
+
+      return {
+        ...state,
+        developments: {
+          ...state.developments,
+          items: updatedItems,
+          selected: isSelected ? { ...state.developments.selected, ...updatedDev } : state.developments.selected,
+          reloadToken: state.developments.reloadToken + 1,
+        },
+        development: {
+          ...state.development,
+          placed: isPlaced ? { ...state.development.placed, ...updatedDev } : state.development.placed,
+          error: null,
+        },
+        // Stale traffic visualization clearance: roads return to baseline until What-If runs on updated config
+        traffic: {
+          ...state.traffic,
+          scenario: null,
+        },
+        simulation: {
+          ...state.simulation,
+          result: null,
+          error: null,
+        },
+        ui: {
+          ...state.ui,
+          editingDevelopmentId: null,
+          fullReportOpen: false,
+        },
+      };
+    }
     case "SET_NEW_SCENARIO":
       return {
         ...state,
+        ui: {
+          ...state.ui,
+          fullReportOpen: false,
+          selectedReport: null,
+          buildingReportsOpen: false,
+        },
         development: { ...initialState.development, placed: null },
         developments: { ...state.developments, selected: null, deleteError: null },
         simulation: { running: false, result: null, error: null, startedAt: null },
+        traffic: { ...state.traffic, scenario: null },
         map: { ...state.map, selectedLocation: null, selectedRoad: null },
       };
     case "SIMULATION_RUNNING":
       return {
         ...state,
+        ui: {
+          ...state.ui,
+          fullReportOpen: false,
+        },
         simulation: { running: true, startedAt: Date.now(), error: null },
+        traffic: { ...state.traffic, scenario: null },
       };
-    case "SIMULATION_DONE":
+    case "SIMULATION_DONE": {
+      const activeDev =
+        state.development.placed ||
+        state.developments.selected ||
+        state.development;
+
+      const reportRecord = createReportRecord({
+        development: activeDev,
+        simulationResult: action.result,
+        scenarioName: activeDev?.name,
+      });
+
+      const updatedReports = addReportToCollection(state.reports, reportRecord);
+
       return {
         ...state,
-        simulation: { running: false, error: null, result: action.result, startedAt: state.simulation.startedAt },
+        reports: updatedReports,
+        simulation: {
+          running: false,
+          error: null,
+          result: action.result,
+          startedAt: state.simulation.startedAt,
+        },
+        traffic: {
+          ...state.traffic,
+          scenario: action.result?.stage4_impact_assessment?.road_assessments || [],
+        },
+        ui: {
+          ...state.ui,
+          selectedReport: reportRecord,
+        },
       };
+    }
     case "SIMULATION_ERROR":
       return {
         ...state,
+        ui: {
+          ...state.ui,
+          fullReportOpen: false,
+        },
         simulation: { running: false, error: action.error, result: null, startedAt: state.simulation.startedAt },
+        traffic: { ...state.traffic, scenario: null },
+      };
+    case "OPEN_FULL_REPORT":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          fullReportOpen: true,
+          selectedReport: action.report !== undefined ? action.report : state.ui.selectedReport,
+        },
+      };
+    case "CLOSE_FULL_REPORT":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          fullReportOpen: false,
+        },
+      };
+    case "OPEN_BUILDING_REPORTS":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          buildingReportsOpen: true,
+        },
+      };
+    case "CLOSE_BUILDING_REPORTS":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          buildingReportsOpen: false,
+        },
+      };
+    case "SET_ACTIVE_TAB":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          activeTab: action.tab,
+          fullReportOpen: action.tab === "scenarios" ? state.ui.fullReportOpen : false,
+        },
       };
     case "TOGGLE_PANEL":
       return {
@@ -299,6 +497,11 @@ function reducer(state, action) {
     case "RESET": {
       return {
         ...initialState,
+        traffic: {
+          ...initialState.traffic,
+          baseline: state.traffic.baseline,
+          scenario: null,
+        },
         map: {
           ...state.map,
           layerVisibility: state.map.layerVisibility,
