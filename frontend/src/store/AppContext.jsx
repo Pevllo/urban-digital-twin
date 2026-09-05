@@ -21,6 +21,7 @@ const initialState = {
   // Map state
   map: {
     viewerReady: false,
+    basemap: "satellite", // "satellite" | "google-roadmap"
     layerVisibility: {
       roads: true,
       buildings: true,
@@ -29,6 +30,14 @@ const initialState = {
       osmBoundaries: true,
     },
     selectedLocation: null, // { latitude, longitude, name }
+    selectedRoad: null, // { id, osm_way_id, name, highway, baseline, scenario }
+  },
+
+  // Baseline traffic
+  traffic: {
+    loading: false,
+    baseline: null,
+    error: null,
   },
 
   // Existing developments from backend
@@ -106,6 +115,8 @@ function reducer(state, action) {
       return { ...state, map: { ...state.map, viewerReady: true } };
     case "MAP_VIEWER_ERROR":
       return { ...state, map: { ...state.map, error: action.error } };
+    case "SET_BASEMAP":
+      return { ...state, map: { ...state.map, basemap: action.basemap } };
     case "TOGGLE_LAYER":
       return {
         ...state,
@@ -120,10 +131,23 @@ function reducer(state, action) {
     case "MAP_LOCATION_SELECTED":
       return {
         ...state,
-        map: { ...state.map, selectedLocation: action.location },
+        map: { ...state.map, selectedLocation: action.location, selectedRoad: null },
       };
     case "MAP_LOCATION_CLEARED":
       return { ...state, map: { ...state.map, selectedLocation: null } };
+    case "MAP_ROAD_SELECTED":
+      return {
+        ...state,
+        map: { ...state.map, selectedRoad: action.road },
+      };
+    case "MAP_ROAD_CLEARED":
+      return { ...state, map: { ...state.map, selectedRoad: null } };
+    case "TRAFFIC_BASELINE_LOADING":
+      return { ...state, traffic: { ...state.traffic, loading: true, error: null } };
+    case "TRAFFIC_BASELINE_LOADED":
+      return { ...state, traffic: { ...state.traffic, loading: false, baseline: action.roads, error: null } };
+    case "TRAFFIC_BASELINE_ERROR":
+      return { ...state, traffic: { ...state.traffic, loading: false, error: action.error } };
     case "DEVELOPMENTS_LOADING":
       return { ...state, developments: { ...state.developments, loading: true, error: null } };
     case "DEVELOPMENTS_LOADED":
@@ -247,7 +271,7 @@ function reducer(state, action) {
         development: { ...initialState.development, placed: null },
         developments: { ...state.developments, selected: null, deleteError: null },
         simulation: { running: false, result: null, error: null, startedAt: null },
-        map: { ...state.map, selectedLocation: null },
+        map: { ...state.map, selectedLocation: null, selectedRoad: null },
       };
     case "SIMULATION_RUNNING":
       return {
@@ -273,7 +297,14 @@ function reducer(state, action) {
         },
       };
     case "RESET": {
-      return { ...initialState, map: { ...state.map, layerVisibility: state.map.layerVisibility } };
+      return {
+        ...initialState,
+        map: {
+          ...state.map,
+          layerVisibility: state.map.layerVisibility,
+          basemap: state.map.basemap,
+        },
+      };
     }
     default:
       return state;

@@ -24,8 +24,13 @@ export const OSM_BOUNDS = {
 export const CITY_BOUNDS = OSM_BOUNDS;
 
 export const PROJECT_CENTER = {
-  latitude: (south + north) / 2,
-  longitude: (west + east) / 2,
+  latitude: 30.02374,
+  longitude: 31.75489,
+};
+
+export const BASEMAPS = {
+  SATELLITE: "satellite",
+  GOOGLE_ROADMAP: "google-roadmap",
 };
 
 /**

@@ -2,8 +2,6 @@ import { useEffect, useRef } from "react";
 import {
   Viewer,
   Ion,
-  OpenStreetMapImageryProvider,
-  ImageryLayer,
   Terrain,
   Cartesian3,
   Cartographic,
@@ -22,11 +20,17 @@ import {
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./CesiumMap.css";
 
-import { SPATIAL_FEATURES, OSM_BOUNDS, getProjectBounds } from "../../config/mapConfig.js";
+import { SPATIAL_FEATURES, OSM_BOUNDS, PROJECT_CENTER, BASEMAPS, getProjectBounds } from "../../config/mapConfig.js";
 import { useApp } from "../../store/AppContext.jsx";
 import { CesiumMapApi } from "./CesiumMapApi.js";
 import { render3DDevelopmentComplex } from "./development/Development3DRenderer.js";
 import { findNearestValidPosition } from "./development/spatialValidation.js";
+import { createSatelliteLayer, createGoogleRoadmapLayer } from "../../services/basemapService.js";
+import {
+  classifyBaselineTraffic,
+  classifyScenarioRoadImpact,
+  extractOsmWayId,
+} from "../../utils/trafficColors.js";
 
 // Pre-configure Cesium's default view to the authoritative OSM project bounds
 Camera.DEFAULT_VIEW_RECTANGLE = Rectangle.fromDegrees(
@@ -99,24 +103,34 @@ export function CesiumMap() {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   const layerGroupsRef = useRef({});
+  const activeBasemapLayerRef = useRef(null);
   const spatialReady = useRef(false);
   const didInitialFly = useRef(false);
 
   const { state, dispatch } = useApp();
+  const basemap = state.map.basemap || BASEMAPS.SATELLITE;
   const layerVisibility = state.map.layerVisibility;
   const selectedLocation = state.map.selectedLocation;
   const developments = state.developments.items;
   const placedDev = state.development.placed;
   const selectedDev = state.developments.selected;
   const cityInfo = state.city.info;
+  const trafficBaseline = state.traffic.baseline;
+  const simulationResult = state.simulation.result;
 
   const developmentsRef = useRef(developments);
   const placedDevRef = useRef(placedDev);
+  const layerVisibilityRef = useRef(layerVisibility);
+  const trafficBaselineRef = useRef(trafficBaseline);
+  const simulationResultRef = useRef(simulationResult);
 
   useEffect(() => {
     developmentsRef.current = developments;
     placedDevRef.current = placedDev;
-  }, [developments, placedDev]);
+    layerVisibilityRef.current = layerVisibility;
+    trafficBaselineRef.current = trafficBaseline;
+    simulationResultRef.current = simulationResult;
+  }, [developments, placedDev, layerVisibility, trafficBaseline, simulationResult]);
 
   // ---- Init once ----
   useEffect(() => {
@@ -139,9 +153,7 @@ export function CesiumMap() {
       infoBox: false,
       selectionIndicator: false,
       scene3DOnly: true,
-      imageryProvider: new OpenStreetMapImageryProvider({
-        url: "https://tile.openstreetmap.org/",
-      }),
+      imageryProvider: false,
       requestRenderMode: true,
       targetFrameRate: 30,
       contextOptions: {
@@ -165,37 +177,8 @@ export function CesiumMap() {
     flyToCityArea(viewer, null, 0);
 
     if (CESIUM_ION_TOKEN) {
-      // Realistic map surface: Cesium World Terrain (real ground) + Cesium World
-      // Imagery (reliable tiles, not the blue ellipsoid fallback).
-      //
-      // The floating roofs were Cesium Ion OSM Buildings 3D Tiles: they are
-      // authored to sit on World Terrain and floated because none was loaded.
-      // Loading terrain here makes them (and every clamp-to-ground feature) sit
-      // on the actual ground. Both fail gracefully back to the OSM imagery +
-      // flat ellipsoid if the Ion token/network is unavailable.
-
-      // In Cesium 1.144 these factory helpers are SYNCHRONOUS: they return the
-      // ImageryLayer / Terrain object immediately and resolve their Ion
-      // provider in the background (no Promise). Do not call .then() on them.
-      const worldImagery = ImageryLayer.fromWorldImagery();
-      worldImagery.name = "Cesium World Imagery";
-      // Append on top (no explicit index so it can't go out of bounds). World
-      // tiles stream in and cover whatever base layer the Viewer already has
-      // (the OSM fallback); if World Imagery fails, the base layer below
-      // remains visible (never a blank/blue canvas).
-      viewer.imageryLayers.add(worldImagery);
-      worldImagery.errorEvent.addEventListener(() => {
-        // World Imagery failed -> the base OSM layer below remains.
-      });
-
-      // Cesium World Terrain: real ground so the Ion OSM Buildings 3D Tiles
-      // (baked against World Terrain) sit on it instead of floating above the
-      // flat ellipsoid. setTerrain() accepts the Terrain object directly and
-      // handles its async readiness.
       const terrainObj = Terrain.fromWorldTerrain();
       viewer.scene.setTerrain(terrainObj);
-      // Enable depth testing only once real terrain is actually present, so
-      // building bases sit on (not under/over) the ground without z-fighting.
       const enableDepthTesting = () => {
         if (!viewer.isDestroyed()) {
           viewer.scene.globe.depthTestAgainstTerrain = true;
@@ -217,13 +200,14 @@ export function CesiumMap() {
         });
     }
 
-    // ---- Location and Development selection ----
+    // ---- Location, Development, and Road selection ----
     const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((click) => {
-      // 1. Check if user clicked an existing or proposed development 3D entity
       const picked = viewer.scene.pick(click.position);
       if (picked && picked.id) {
         const entity = picked.id;
+
+        // 1. Check if user clicked an existing or proposed development 3D entity
         const devId =
           entity.properties?.development_id?.getValue?.() ||
           entity.properties?.development_id ||
@@ -249,9 +233,33 @@ export function CesiumMap() {
             return;
           }
         }
+
+        // 2. Check if user clicked a road entity
+        if (entity.id && (String(entity.id).startsWith("way_") || entity.polyline)) {
+          const props = entity.properties?.getValue ? entity.properties.getValue() : entity.properties;
+          const wayId = props?.osm_way_id || extractOsmWayId(entity.id);
+          const assessment = props?.trafficAssessment;
+          const baseline = props?.baselineTraffic;
+
+          dispatch({
+            type: "MAP_ROAD_SELECTED",
+            road: {
+              id: entity.id,
+              osm_way_id: wayId,
+              name: entity.name || props?.road_name || `Road ${wayId}`,
+              highway: props?.highway || "road",
+              lanes: props?.lanes,
+              maxspeed: props?.maxspeed,
+              trafficAssessment: assessment,
+              baselineTraffic: baseline,
+              trafficStatus: props?.trafficStatus,
+            },
+          });
+          return;
+        }
       }
 
-      // 2. Normal location click
+      // 3. Normal location click
       const ray = viewer.camera.getPickRay(click.position);
       if (!ray) return;
       let cartesian = viewer.scene.globe.pick(ray, viewer.scene);
@@ -298,6 +306,47 @@ export function CesiumMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- Switch basemap imagery layer without touching entities or camera ----
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    let isCancelled = false;
+
+    async function applyBasemap() {
+      const resultLayer =
+        basemap === BASEMAPS.GOOGLE_ROADMAP
+          ? (await createGoogleRoadmapLayer()).layer
+          : createSatelliteLayer(Boolean(CESIUM_ION_TOKEN));
+
+      if (isCancelled || !viewerRef.current || viewerRef.current.isDestroyed()) {
+        try {
+          if (resultLayer && !resultLayer.isDestroyed?.()) {
+            resultLayer.destroy?.();
+          }
+        } catch {
+          // no-op
+        }
+        return;
+      }
+
+      // Remove existing basemap layer safely
+      if (activeBasemapLayerRef.current && viewer.imageryLayers.contains(activeBasemapLayerRef.current)) {
+        viewer.imageryLayers.remove(activeBasemapLayerRef.current, true);
+      }
+
+      viewer.imageryLayers.add(resultLayer, 0);
+      activeBasemapLayerRef.current = resultLayer;
+      viewer.scene.requestRender();
+    }
+
+    applyBasemap();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [basemap]);
+
   // ---- Render OSM buildings + roads once ----
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -306,13 +355,21 @@ export function CesiumMap() {
 
     viewer.entities.suspendEvents();
     try {
-      buildRoads(viewer, layerGroupsRef);
+      buildRoads(viewer, layerGroupsRef, trafficBaselineRef.current, simulationResultRef.current);
       buildBuildings(viewer, layerGroupsRef);
       buildOsmBoundaries(viewer, layerGroupsRef);
     } finally {
       viewer.entities.resumeEvents();
     }
   }, []);
+
+  // ---- Update road traffic materials without rebuilding datasource ----
+  useEffect(() => {
+    const roadsGroup = layerGroupsRef.current.roads;
+    const viewer = viewerRef.current;
+    if (!roadsGroup || !viewer) return;
+    updateRoadTrafficVisuals(roadsGroup, trafficBaseline, simulationResult, viewer);
+  }, [trafficBaseline, simulationResult]);
 
   // ---- Render project boundary (static, based on city metadata) ----
   useEffect(() => {
@@ -340,6 +397,9 @@ export function CesiumMap() {
     setVisible("boundary", layerVisibility.projectBoundary);
     setVisible("osmBoundaries", layerVisibility.osmBoundaries);
     setVisible("developments", layerVisibility.developments);
+    if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+      viewerRef.current.scene.requestRender();
+    }
   }, [layerVisibility]);
 
   // ---- Render developments ----
@@ -350,6 +410,7 @@ export function CesiumMap() {
     if (old) viewer.dataSources.remove(old);
 
     const group = new CustomDataSource("Developments");
+    group.show = Boolean(layerVisibilityRef.current?.developments);
     viewer.dataSources.add(group);
     layerGroupsRef.current.developments = group;
 
@@ -358,13 +419,16 @@ export function CesiumMap() {
       const isProposed = Boolean(placedDev && dev.development_id === placedDev.development_id);
       render3DDevelopmentComplex(dev, group, isProposed, SPATIAL_FEATURES);
     });
-  }, [developments, placedDev, layerVisibility.developments]);
+
+    viewer.scene.requestRender();
+  }, [developments, placedDev]);
 
   // ---- Render selected location marker ----
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
     renderSelectedMarker(viewer, selectedLocation, placedDev, selectedDev);
+    viewer.scene.requestRender();
   }, [selectedLocation, placedDev, selectedDev]);
 
   return (
@@ -376,17 +440,14 @@ export function CesiumMap() {
 
 // ============ Builders ============
 
-function flyToCityArea(viewer, info, duration = 2.0) {
+function flyToCityArea(viewer, _info, duration = 2.0) {
   if (!viewer || viewer.isDestroyed()) return;
-  const b = getProjectBounds(info);
-  const rectangle = Rectangle.fromDegrees(
-    b.west,
-    b.south,
-    b.east,
-    b.north,
-  );
+  const lon = PROJECT_CENTER.longitude; // 31.75489° E
+  const lat = PROJECT_CENTER.latitude;  // 30.02374° N
+  const height = 5000;
+
   viewer.camera.flyTo({
-    destination: rectangle,
+    destination: Cartesian3.fromDegrees(lon, lat, height),
     orientation: {
       heading: CesiumMath.toRadians(0),
       pitch: CesiumMath.toRadians(-48),
@@ -396,7 +457,7 @@ function flyToCityArea(viewer, info, duration = 2.0) {
   });
 }
 
-function buildRoads(viewer, layerGroupsRef) {
+function buildRoads(viewer, layerGroupsRef, baselineTraffic, simResult) {
   const group = new CustomDataSource("Roads");
   viewer.dataSources.add(group);
   layerGroupsRef.current.roads = group;
@@ -404,20 +465,180 @@ function buildRoads(viewer, layerGroupsRef) {
 
   SPATIAL_FEATURES.roads.forEach((road) => {
     if (!road.coordinates || road.coordinates.length < 2) return;
-    const positions = road.coordinates.map(([lat, lon]) =>
-      Cartesian3.fromDegrees(lon, lat, 5),
+    const positions = Cartesian3.fromDegreesArray(
+      road.coordinates.flatMap(([lat, lon]) => [lon, lat])
     );
+    const initialWidth = roadWidth(road.highway);
+    const initialColor = roadColor(road.highway);
+    const osmWayId = road.osm_way_id || extractOsmWayId(road.id);
+
     entities.add({
       id: road.id,
-      name: road.name_en || road.name || `Road ${road.id.replace("way_", "")}`,
+      name: road.name_en || road.name || `Road ${osmWayId}`,
+      properties: {
+        id: road.id,
+        osm_way_id: osmWayId,
+        highway: road.highway,
+        road_name: road.name_en || road.name || "",
+        lanes: road.lanes,
+        maxspeed: road.maxspeed,
+        baseWidth: initialWidth,
+        trafficAssessment: null,
+        baselineTraffic: null,
+        trafficStatus: null,
+      },
       polyline: {
         positions,
-        width: roadWidth(road.highway),
-        material: new ColorMaterialProperty(roadColor(road.highway)),
-        clampToGround: false,
+        width: initialWidth,
+        material: new ColorMaterialProperty(initialColor),
+        clampToGround: true,
       },
     });
   });
+
+  // Apply initial traffic materials if data is already present
+  updateRoadTrafficVisuals(group, baselineTraffic, simResult, viewer);
+}
+
+function updateRoadTrafficVisuals(roadsGroup, baselineRoads, simResult, viewer) {
+  if (!roadsGroup) return;
+
+  const roadAssessments = simResult?.stage4_impact_assessment?.road_assessments;
+  const isScenarioActive = Array.isArray(roadAssessments) && roadAssessments.length > 0;
+
+  // 1. Build lookup map for scenario results
+  const scenarioMap = new Map();
+  if (isScenarioActive) {
+    roadAssessments.forEach((r) => {
+      const wayId = extractOsmWayId(r.road_id);
+      // Prioritize worsened/critical segments if multiple exist for this OSM way
+      const existing = scenarioMap.get(wayId);
+      if (!existing || r.impact_severity === "CRITICAL" || r.is_los_worsened) {
+        scenarioMap.set(wayId, r);
+      }
+    });
+  }
+
+  // 2. Build lookup map for baseline results
+  const baselineMap = new Map();
+  if (Array.isArray(baselineRoads)) {
+    baselineRoads.forEach((r) => {
+      const wayId = extractOsmWayId(r.osm_way_id);
+      baselineMap.set(wayId, r);
+    });
+  }
+
+  let matchedBaselineCount = 0;
+  let matchedScenarioCount = 0;
+  let sampleLogged = false;
+
+  const entities = roadsGroup.entities.values;
+  roadsGroup.entities.suspendEvents();
+  try {
+    for (let i = 0; i < entities.length; i++) {
+      const entity = entities[i];
+      const props = entity.properties?.getValue ? entity.properties.getValue() : entity.properties;
+      const wayId = props?.osm_way_id || extractOsmWayId(entity.id);
+      const highway = props?.highway;
+      const baseW = props?.baseWidth || roadWidth(highway);
+
+      if (isScenarioActive) {
+        const scenRecord = scenarioMap.get(wayId);
+        if (scenRecord) {
+          matchedScenarioCount++;
+          const impact = classifyScenarioRoadImpact(scenRecord);
+          entity.polyline.material = new ColorMaterialProperty(impact.color);
+          entity.polyline.width = impact.isHighlighted ? Math.max(baseW * 1.6, 3.2) : baseW;
+          if (entity.properties) {
+            entity.properties.trafficAssessment = scenRecord;
+            entity.properties.trafficStatus = impact.label;
+          }
+
+          if (!sampleLogged) {
+            sampleLogged = true;
+            console.log("[Traffic Diagnostic] Scenario Matched Road:", {
+              osmId: wayId,
+              baselineVc: scenRecord.baseline_vc,
+              scenarioVc: scenRecord.scenario_vc,
+              deltaVc: scenRecord.vc_change,
+              classification: impact.label,
+              cesiumColor: impact.hex,
+              width: entity.polyline.width,
+            });
+          }
+        } else {
+          // Road unaffected in scenario: color by baseline if available, or default
+          const baseRecord = baselineMap.get(wayId);
+          if (baseRecord) {
+            matchedBaselineCount++;
+            const vc = Number(
+              baseRecord.congestion_ratio ??
+              (baseRecord.traffic_volume / Math.max(baseRecord.road_capacity_proxy, 1))
+            );
+            const traffic = classifyBaselineTraffic(vc);
+            entity.polyline.material = new ColorMaterialProperty(traffic.color);
+          } else {
+            entity.polyline.material = new ColorMaterialProperty(roadColor(highway));
+          }
+          entity.polyline.width = baseW;
+          if (entity.properties) {
+            entity.properties.trafficAssessment = null;
+            entity.properties.trafficStatus = "Unaffected";
+          }
+        }
+      } else if (baselineMap.size > 0) {
+        const baseRecord = baselineMap.get(wayId);
+        if (baseRecord) {
+          matchedBaselineCount++;
+          const vc = Number(
+            baseRecord.congestion_ratio ??
+            (baseRecord.traffic_volume / Math.max(baseRecord.road_capacity_proxy, 1))
+          );
+          const traffic = classifyBaselineTraffic(vc);
+          entity.polyline.material = new ColorMaterialProperty(traffic.color);
+          if (entity.properties) {
+            entity.properties.baselineTraffic = baseRecord;
+            entity.properties.trafficStatus = traffic.label;
+          }
+
+          if (!sampleLogged) {
+            sampleLogged = true;
+            console.log("[Traffic Diagnostic] Baseline Matched Road:", {
+              osmId: wayId,
+              baselineVc: vc,
+              classification: traffic.label,
+              cesiumColor: traffic.hex,
+              width: baseW,
+            });
+          }
+        } else {
+          entity.polyline.material = new ColorMaterialProperty(roadColor(highway));
+        }
+        entity.polyline.width = baseW;
+      } else {
+        entity.polyline.material = new ColorMaterialProperty(roadColor(highway));
+        entity.polyline.width = baseW;
+      }
+    }
+  } finally {
+    roadsGroup.entities.resumeEvents();
+  }
+
+  if (baselineMap.size > 0 || isScenarioActive) {
+    console.log("[Traffic Diagnostic] Summary:", {
+      baselineRecords: baselineMap.size,
+      roadEntities: entities.length,
+      matchedRoadIds: matchedBaselineCount,
+      unmatchedTrafficIds: Math.max(0, baselineMap.size - matchedBaselineCount),
+      unmatchedRoadIds: Math.max(0, entities.length - matchedBaselineCount),
+      scenarioAssessments: scenarioMap.size,
+      scenarioMatchedRoads: matchedScenarioCount,
+    });
+  }
+
+  if (viewer && !viewer.isDestroyed()) {
+    viewer.scene.requestRender();
+  }
 }
 
 function buildBuildings(viewer, layerGroupsRef) {

@@ -474,6 +474,11 @@ input {
 .map-tools-block {
   flex: 0 0 auto;
 }
+.map-toolbar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .map-toolbar {
   display: flex;
   gap: 4px;
@@ -501,6 +506,53 @@ input {
 .map-tool.active {
   color: var(--accent);
   background: var(--accent-soft);
+}
+
+.basemap-toolbar {
+  background: var(--bg-elev-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.basemap-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.basemap-switch {
+  display: flex;
+  gap: 4px;
+}
+.basemap-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.basemap-btn:hover {
+  color: var(--text);
+  background: var(--bg-elev-3);
+}
+.basemap-btn.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  font-weight: 600;
 }
 
 .layers-panel {
@@ -606,6 +658,59 @@ input {
 .swatch-dev-boundary {
   background: transparent;
   border: 2px dashed #38bdf8;
+}
+.swatch-traffic-healthy {
+  background: #10b981;
+}
+.swatch-traffic-moderate {
+  background: #eab308;
+}
+.swatch-traffic-worsened {
+  background: #f97316;
+}
+.swatch-traffic-critical {
+  background: #b91c1c;
+}
+
+.road-info-card .road-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 4px;
+}
+.road-meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.road-status.status-worsened,
+.road-status.status-significantly-worsened {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+.road-status.status-critical-impact,
+.road-status.status-congested {
+  background: rgba(220, 38, 38, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(220, 38, 38, 0.3);
+}
+.road-status.status-moderate-impact,
+.road-status.status-moderate {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+.road-status.status-unaffected---healthy,
+.road-status.status-healthy--free-flow- {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.text-danger {
+  color: #f97316 !important;
+  font-weight: 600;
 }
 
 /* ===== Right floating column ===== */
